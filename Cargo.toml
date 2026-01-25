@@ -1,0 +1,16 @@
+[package]
+name = "RustroverProjects"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+# Vulkan + windowing + image loading
+vulkano = "0.32"
+vulkano-shaders = "0.32"
+vulkano-win = "0.32"
+winit = "0.27"
+image = "0.24"
+anyhow = "1.0"
+bytemuck = { version = "1.14", features = ["derive"] }
+
