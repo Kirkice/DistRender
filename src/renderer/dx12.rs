@@ -62,22 +62,11 @@ impl Renderer {
             
             let root_signature: ID3D12RootSignature = gfx.device.CreateRootSignature(0, std::slice::from_raw_parts(signature.GetBufferPointer() as _, signature.GetBufferSize())).unwrap();
 
-            // 2. Shaders
-            let shaders_hlsl = "
-                struct PSInput {
-                    float4 position : SV_POSITION;
-                    float4 color : COLOR;
-                };
-                PSInput VSMain(float2 position : POSITION, float3 color : COLOR) {
-                    PSInput result;
-                    result.position = float4(position, 0.0, 1.0);
-                    result.color = float4(color, 1.0);
-                    return result;
-                }
-                float4 PSMain(PSInput input) : SV_TARGET {
-                    return input.color;
-                }
-            ";
+            // 2. Shaders（从外部文件读取 HLSL）
+            use std::fs;
+            let hlsl_path = "src/renderer/shaders/shader.hlsl";
+            let shaders_hlsl = fs::read_to_string(hlsl_path)
+                .expect("Failed to read shader.hlsl");
 
             let mut vs_blob = None;
             let mut ps_blob = None;
@@ -130,7 +119,6 @@ impl Renderer {
                 }
                 panic!("PS Compile Failed: {:?}", e);
             }
-            
             let vs_blob = vs_blob.unwrap();
             let ps_blob = ps_blob.unwrap();
 
