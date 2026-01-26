@@ -23,6 +23,8 @@ pub struct Renderer {
     vertex_buffer_view: D3D12_VERTEX_BUFFER_VIEW,
     viewport: D3D12_VIEWPORT,
     scissor_rect: RECT,
+    command_allocator: ID3D12CommandAllocator,
+    command_list: ID3D12GraphicsCommandList,
 }
 
 impl Renderer {
@@ -182,6 +184,19 @@ impl Renderer {
                 CullMode: D3D12_CULL_MODE_NONE,
                 ..Default::default()
             };
+            // 显式禁用深度测试（因为我们没有深度缓冲区）
+            pso_desc.DepthStencilState = D3D12_DEPTH_STENCIL_DESC {
+                DepthEnable: false.into(),
+                DepthWriteMask: D3D12_DEPTH_WRITE_MASK_ZERO,
+                DepthFunc: D3D12_COMPARISON_FUNC_ALWAYS,
+                StencilEnable: false.into(),
+                StencilReadMask: 0,
+                StencilWriteMask: 0,
+                FrontFace: D3D12_DEPTH_STENCILOP_DESC::default(),
+                BackFace: D3D12_DEPTH_STENCILOP_DESC::default(),
+            };
+            pso_desc.SampleMask = 0xFFFFFFFF;
+            pso_desc.DSVFormat = DXGI_FORMAT_UNKNOWN;
             pso_desc.InputLayout = D3D12_INPUT_LAYOUT_DESC {
                 pInputElementDescs: input_element_descs.as_ptr(),
                 NumElements: input_element_descs.len() as u32,
@@ -256,6 +271,22 @@ impl Renderer {
                 bottom: gfx.height as i32,
             };
 
+            // 7. 创建命令对象
+            let command_allocator: ID3D12CommandAllocator =
+                gfx.device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)
+                .expect("Failed to create CommandAllocator");
+
+            let command_list: ID3D12GraphicsCommandList =
+                gfx.device.CreateCommandList(
+                    0,
+                    D3D12_COMMAND_LIST_TYPE_DIRECT,
+                    &command_allocator,
+                    Some(&pso)
+                ).expect("Failed to create CommandList");
+
+            // 初始创建时命令列表是打开状态，需要先关闭
+            command_list.Close().expect("Failed to close initial CommandList");
+
             Self {
                 gfx,
                 root_signature,
@@ -264,6 +295,8 @@ impl Renderer {
                 vertex_buffer_view,
                 viewport,
                 scissor_rect,
+                command_allocator,
+                command_list,
             }
         }
     }
@@ -274,10 +307,18 @@ impl Renderer {
 
     pub fn draw(&mut self) {
         unsafe {
-            // Simple Clear Screen
-            let command_allocator: ID3D12CommandAllocator = self.gfx.device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT).unwrap();
-            let command_list: ID3D12GraphicsCommandList = self.gfx.device.CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, &command_allocator, None).unwrap();
-            
+            // 等待 GPU 完成前一帧（移到前面，确保安全重置）
+            let fence_value = self.gfx.fence_value - 1;
+            if fence_value > 0 && self.gfx.fence.GetCompletedValue() < fence_value {
+                self.gfx.fence.SetEventOnCompletion(fence_value, self.gfx.fence_event).unwrap();
+                WaitForSingleObject(self.gfx.fence_event, windows::Win32::System::Threading::INFINITE);
+            }
+
+            // 重置命令分配器和命令列表
+            self.command_allocator.Reset().expect("Failed to reset CommandAllocator");
+            self.command_list.Reset(&self.command_allocator, Some(&self.pso))
+                .expect("Failed to reset CommandList");
+
             // Transition Barrier Present -> RenderTarget
             let barrier = D3D12_RESOURCE_BARRIER {
                 Type: D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
@@ -291,25 +332,25 @@ impl Renderer {
                     }),
                 },
             };
-            command_list.ResourceBarrier(&[barrier]);
+            self.command_list.ResourceBarrier(&[barrier]);
 
             // Clear RTV
             let rtv_handle = D3D12_CPU_DESCRIPTOR_HANDLE {
                 ptr: self.gfx.rtv_heap.GetCPUDescriptorHandleForHeapStart().ptr + (self.gfx.frame_index * self.gfx.rtv_descriptor_size),
             };
             let clear_color = [0.0, 0.0, 0.2, 1.0]; // Dark Blue to distinguish
-            command_list.ClearRenderTargetView(rtv_handle, &clear_color, None);
+            self.command_list.ClearRenderTargetView(rtv_handle, &clear_color, None);
 
             // Draw Triangle
-            command_list.SetGraphicsRootSignature(&self.root_signature);
-            command_list.SetPipelineState(&self.pso);
-            command_list.RSSetViewports(&[self.viewport]);
-            command_list.RSSetScissorRects(&[self.scissor_rect]);
+            self.command_list.SetGraphicsRootSignature(&self.root_signature);
+            self.command_list.SetPipelineState(&self.pso);
+            self.command_list.RSSetViewports(&[self.viewport]);
+            self.command_list.RSSetScissorRects(&[self.scissor_rect]);
             
-            command_list.OMSetRenderTargets(1, Some(&rtv_handle), false, None);
-            command_list.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-            command_list.IASetVertexBuffers(0, Some(&[self.vertex_buffer_view]));
-            command_list.DrawInstanced(3, 1, 0, 0);
+            self.command_list.OMSetRenderTargets(1, Some(&rtv_handle), false, None);
+            self.command_list.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            self.command_list.IASetVertexBuffers(0, Some(&[self.vertex_buffer_view]));
+            self.command_list.DrawInstanced(3, 1, 0, 0);
 
             // Transition Barrier RenderTarget -> Present
             let barrier_back = D3D12_RESOURCE_BARRIER {
@@ -324,27 +365,22 @@ impl Renderer {
                     }),
                 },
             };
-            command_list.ResourceBarrier(&[barrier_back]);
+            self.command_list.ResourceBarrier(&[barrier_back]);
 
-            command_list.Close().unwrap();
+            self.command_list.Close().unwrap();
 
             // Execute
-            let command_lists = [Some(ID3D12CommandList::from(command_list))];
+            let command_lists = [Some(self.command_list.clone().into())];
             self.gfx.command_queue.ExecuteCommandLists(&command_lists);
 
             // Present
             self.gfx.swap_chain.Present(1, DXGI_PRESENT(0)).unwrap();
 
-            // Wait for GPU (Brute force sync for simplicity)
-            let fence_value = self.gfx.fence_value;
-            self.gfx.command_queue.Signal(&self.gfx.fence, fence_value).unwrap();
+            // Signal fence for next frame
+            self.gfx.command_queue.Signal(&self.gfx.fence, self.gfx.fence_value).unwrap();
             self.gfx.fence_value += 1;
 
-            if self.gfx.fence.GetCompletedValue() < fence_value {
-                self.gfx.fence.SetEventOnCompletion(fence_value, self.gfx.fence_event).unwrap();
-                WaitForSingleObject(self.gfx.fence_event, windows::Win32::System::Threading::INFINITE);
-            }
-
+            // Update frame index
             self.gfx.frame_index = self.gfx.swap_chain.GetCurrentBackBufferIndex() as usize;
         }
     }

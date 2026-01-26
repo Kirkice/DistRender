@@ -76,13 +76,16 @@ impl Renderer {
         };
 
         let vertex1 = MyVertex {
-            position: [-0.5, -0.5],
+            position: [0.0, 0.5],
+            color: [1.0, 0.0, 0.0],
         };
         let vertex2 = MyVertex {
-            position: [0.0, 0.5],
+            position: [0.5, -0.5],
+            color: [0.0, 1.0, 0.0],
         };
         let vertex3 = MyVertex {
-            position: [0.5, -0.25],
+            position: [-0.5, -0.5],
+            color: [0.0, 0.0, 1.0],
         };
 
         let vertex_buffer = CpuAccessibleBuffer::from_iter(
@@ -213,7 +216,7 @@ impl Renderer {
         builder
             .begin_render_pass(
                 RenderPassBeginInfo {
-                    clear_values: vec![Some([0.0, 0.0, 0.0, 1.0].into())],
+                    clear_values: vec![Some([0.0, 0.0, 0.2, 1.0].into())],
                     ..RenderPassBeginInfo::framebuffer(
                         self.framebuffers[image_index as usize].clone(),
                     )
