@@ -1,12 +1,15 @@
 use std::sync::Arc;
 use std::mem::ManuallyDrop;
+use tracing::{trace, debug, info, warn, error};
 use winit::event_loop::EventLoop;
 use crate::gfx::Dx12Backend;
-use windows::Win32::Graphics::Dxgi::{IDXGISwapChain3, DXGI_PRESENT, Common::*};
+use crate::core::Config;
+use crate::core::math::{Vector2, Vector3};
+use windows::Win32::Graphics::Dxgi::{DXGI_PRESENT, DXGI_SWAP_CHAIN_FLAG, Common::*};
 use windows::Win32::Graphics::Direct3D12::*;
 use windows::Win32::Graphics::Direct3D::Fxc::*;
 use windows::Win32::Graphics::Direct3D::*;
-use windows::Win32::Foundation::{HANDLE, RECT};
+use windows::Win32::Foundation::RECT;
 use windows::Win32::System::Threading::WaitForSingleObject;
 
 #[repr(C)]
@@ -15,26 +18,35 @@ struct Vertex {
     color: [f32; 3],
 }
 
+impl Vertex {
+    /// 从数学库的 Vector 类型创建顶点
+    fn from_vectors(position: Vector2, color: Vector3) -> Self {
+        Self {
+            position: [position.x, position.y],
+            color: [color.x, color.y, color.z],
+        }
+    }
+}
+
+const FRAME_COUNT: usize = 2;
+
 pub struct Renderer {
     gfx: Dx12Backend,
     root_signature: ID3D12RootSignature,
     pso: ID3D12PipelineState,
+    #[allow(dead_code)]  // 保留供将来使用
     vertex_buffer: ID3D12Resource,
     vertex_buffer_view: D3D12_VERTEX_BUFFER_VIEW,
     viewport: D3D12_VIEWPORT,
     scissor_rect: RECT,
-    command_allocator: ID3D12CommandAllocator,
+    command_allocators: [ID3D12CommandAllocator; FRAME_COUNT],
     command_list: ID3D12GraphicsCommandList,
+    fence_values: [u64; FRAME_COUNT],
 }
 
 impl Renderer {
-    pub fn new(event_loop: &EventLoop<()>) -> Self {
-        let window = winit::window::WindowBuilder::new()
-            .build(event_loop)
-            .unwrap();
-        let window = Arc::new(window);
-        
-        let gfx = Dx12Backend::new(window);
+    pub fn new(event_loop: &EventLoop<()>, config: &Config) -> Self {
+        let gfx = Dx12Backend::new(event_loop, config);
 
         unsafe {
             // 1. Root Signature
@@ -208,11 +220,20 @@ impl Renderer {
 
             let pso: ID3D12PipelineState = gfx.device.CreateGraphicsPipelineState(&pso_desc).expect("Failed to create PSO");
 
-            // 5. Vertex Buffer
+            // 5. Vertex Buffer - 使用数学库类型创建顶点数据
             let vertices = [
-                Vertex { position: [0.0, 0.5], color: [1.0, 0.0, 0.0] },
-                Vertex { position: [0.5, -0.5], color: [0.0, 1.0, 0.0] },
-                Vertex { position: [-0.5, -0.5], color: [0.0, 0.0, 1.0] },
+                Vertex::from_vectors(
+                    Vector2::new(0.0, 0.5),
+                    Vector3::new(1.0, 0.0, 0.0)  // 红色
+                ),
+                Vertex::from_vectors(
+                    Vector2::new(0.5, -0.5),
+                    Vector3::new(0.0, 1.0, 0.0)  // 绿色
+                ),
+                Vertex::from_vectors(
+                    Vector2::new(-0.5, -0.5),
+                    Vector3::new(0.0, 0.0, 1.0)  // 蓝色
+                ),
             ];
             let vertex_data_size = (std::mem::size_of::<Vertex>() * vertices.len()) as u64;
 
@@ -271,21 +292,30 @@ impl Renderer {
                 bottom: gfx.height as i32,
             };
 
-            // 7. 创建命令对象
-            let command_allocator: ID3D12CommandAllocator =
+            // 7. 创建命令对象（双缓冲）
+            #[cfg(debug_assertions)]
+            debug!(frame_count = FRAME_COUNT, "Creating command allocators for frame buffering");
+
+            let command_allocators: [ID3D12CommandAllocator; FRAME_COUNT] = [
                 gfx.device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)
-                .expect("Failed to create CommandAllocator");
+                    .expect("Failed to create CommandAllocator 0"),
+                gfx.device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)
+                    .expect("Failed to create CommandAllocator 1"),
+            ];
 
             let command_list: ID3D12GraphicsCommandList =
                 gfx.device.CreateCommandList(
                     0,
                     D3D12_COMMAND_LIST_TYPE_DIRECT,
-                    &command_allocator,
+                    &command_allocators[0],
                     Some(&pso)
                 ).expect("Failed to create CommandList");
 
             // 初始创建时命令列表是打开状态，需要先关闭
             command_list.Close().expect("Failed to close initial CommandList");
+
+            #[cfg(debug_assertions)]
+            info!("DX12 Renderer initialized successfully");
 
             Self {
                 gfx,
@@ -295,28 +325,103 @@ impl Renderer {
                 vertex_buffer_view,
                 viewport,
                 scissor_rect,
-                command_allocator,
+                command_allocators,
                 command_list,
+                fence_values: [0; FRAME_COUNT],
             }
         }
     }
 
     pub fn resize(&mut self) {
-        // Handle swapchain resize
+        unsafe {
+            #[cfg(debug_assertions)]
+            debug!("Resizing swapchain...");
+
+            // 等待 GPU 完成所有工作
+            let fence_value = self.gfx.fence_value;
+            self.gfx.command_queue.Signal(&self.gfx.fence, fence_value)
+                .expect("Failed to signal fence for resize");
+            self.gfx.fence_value += 1;
+
+            if self.gfx.fence.GetCompletedValue() < fence_value {
+                self.gfx.fence.SetEventOnCompletion(fence_value, self.gfx.fence_event)
+                    .expect("Failed to set fence event for resize");
+                WaitForSingleObject(self.gfx.fence_event, windows::Win32::System::Threading::INFINITE);
+            }
+
+            #[cfg(debug_assertions)]
+            debug!("GPU idle, resizing swap chain buffers...");
+
+            // 获取新的窗口大小
+            let size = self.gfx.window.inner_size();
+            self.gfx.width = size.width;
+            self.gfx.height = size.height;
+
+            // 调整交换链大小（会自动释放旧的缓冲区）
+            self.gfx.swap_chain.ResizeBuffers(
+                FRAME_COUNT as u32,
+                size.width,
+                size.height,
+                DXGI_FORMAT_R8G8B8A8_UNORM,
+                DXGI_SWAP_CHAIN_FLAG(0),
+            ).expect("Failed to resize swap chain buffers");
+
+            // 重新创建 RTV
+            let rtv_handle = self.gfx.rtv_heap.GetCPUDescriptorHandleForHeapStart();
+            for i in 0..FRAME_COUNT {
+                let surface: ID3D12Resource = self.gfx.swap_chain.GetBuffer(i as u32)
+                    .expect("Failed to get swap chain buffer");
+                let handle = D3D12_CPU_DESCRIPTOR_HANDLE {
+                    ptr: rtv_handle.ptr + (i * self.gfx.rtv_descriptor_size),
+                };
+                self.gfx.device.CreateRenderTargetView(&surface, None, handle);
+            }
+
+            // 更新 viewport 和 scissor rect
+            self.viewport.Width = size.width as f32;
+            self.viewport.Height = size.height as f32;
+            self.scissor_rect.right = size.width as i32;
+            self.scissor_rect.bottom = size.height as i32;
+
+            // 重置 frame index
+            self.gfx.frame_index = self.gfx.swap_chain.GetCurrentBackBufferIndex() as usize;
+
+            // 清除 fence 值（因为我们等待了所有帧完成）
+            self.fence_values = [0; FRAME_COUNT];
+
+            #[cfg(debug_assertions)]
+            debug!(width = size.width, height = size.height, "Resize completed");
+        }
     }
 
     pub fn draw(&mut self) {
         unsafe {
-            // 等待 GPU 完成前一帧（移到前面，确保安全重置）
-            let fence_value = self.gfx.fence_value - 1;
-            if fence_value > 0 && self.gfx.fence.GetCompletedValue() < fence_value {
-                self.gfx.fence.SetEventOnCompletion(fence_value, self.gfx.fence_event).unwrap();
-                WaitForSingleObject(self.gfx.fence_event, windows::Win32::System::Threading::INFINITE);
+            let frame_index = self.gfx.frame_index;
+
+            #[cfg(debug_assertions)]
+            {
+                let completed_value = self.gfx.fence.GetCompletedValue();
+                trace!(frame_index, fence_value = self.gfx.fence_value, completed = completed_value, "Frame state");
             }
 
-            // 重置命令分配器和命令列表
-            self.command_allocator.Reset().expect("Failed to reset CommandAllocator");
-            self.command_list.Reset(&self.command_allocator, Some(&self.pso))
+            // 只等待当前帧的前一次使用完成（双缓冲优化）
+            let fence_value = self.fence_values[frame_index];
+            if fence_value > 0 && self.gfx.fence.GetCompletedValue() < fence_value {
+                #[cfg(debug_assertions)]
+                debug!(frame_index, fence_value, "Waiting for GPU");
+
+                self.gfx.fence.SetEventOnCompletion(fence_value, self.gfx.fence_event)
+                    .expect("Failed to set fence event");
+                WaitForSingleObject(self.gfx.fence_event, windows::Win32::System::Threading::INFINITE);
+
+                #[cfg(debug_assertions)]
+                debug!(frame_index, "GPU wait completed");
+            }
+
+            // 重置当前帧的命令分配器和命令列表
+            let allocator = &self.command_allocators[frame_index];
+            allocator.Reset().expect("Failed to reset CommandAllocator");
+            self.command_list.Reset(allocator, Some(&self.pso))
                 .expect("Failed to reset CommandList");
 
             // Transition Barrier Present -> RenderTarget
@@ -367,21 +472,35 @@ impl Renderer {
             };
             self.command_list.ResourceBarrier(&[barrier_back]);
 
-            self.command_list.Close().unwrap();
+            self.command_list.Close()
+                .expect("Failed to close command list");
+
+            #[cfg(debug_assertions)]
+            trace!(frame_index, "Executing command list");
 
             // Execute
             let command_lists = [Some(self.command_list.clone().into())];
             self.gfx.command_queue.ExecuteCommandLists(&command_lists);
 
             // Present
-            self.gfx.swap_chain.Present(1, DXGI_PRESENT(0)).unwrap();
+            self.gfx.swap_chain.Present(1, DXGI_PRESENT(0)).ok()
+                .expect("Failed to present");
 
-            // Signal fence for next frame
-            self.gfx.command_queue.Signal(&self.gfx.fence, self.gfx.fence_value).unwrap();
+            #[cfg(debug_assertions)]
+            trace!(frame_index, "Presented");
+
+            // Signal fence and store the value for this frame
+            let next_fence_value = self.gfx.fence_value;
+            self.gfx.command_queue.Signal(&self.gfx.fence, next_fence_value)
+                .expect("Failed to signal fence");
+            self.fence_values[frame_index] = next_fence_value;
             self.gfx.fence_value += 1;
 
             // Update frame index
             self.gfx.frame_index = self.gfx.swap_chain.GetCurrentBackBufferIndex() as usize;
+
+            #[cfg(debug_assertions)]
+            trace!(frame_index, next_frame = self.gfx.frame_index, "Frame completed");
         }
     }
 }

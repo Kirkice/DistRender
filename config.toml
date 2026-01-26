@@ -1,0 +1,48 @@
+# DistRender 引擎配置文件
+# 此文件定义了引擎运行时的各种参数
+
+[window]
+# 窗口宽度（像素）
+width = 800
+
+# 窗口高度（像素）
+height = 600
+
+# 窗口标题
+title = "DistRender"
+
+# 是否允许调整窗口大小
+resizable = true
+
+[graphics]
+# 图形后端选择
+# 可选值：
+#   - "vulkan": 使用 Vulkan API（跨平台，默认）
+#   - "dx12": 使用 DirectX 12 API（仅 Windows）
+backend = "vulkan"
+
+# 垂直同步（V-Sync）
+# true: 启用 V-Sync，限制帧率为显示器刷新率
+# false: 禁用 V-Sync，无帧率限制
+vsync = true
+
+# MSAA（多重采样抗锯齿）采样数
+# 可选值：1, 2, 4, 8, 16
+# 1 表示禁用 MSAA
+msaa_samples = 1
+
+[logging]
+# 日志级别
+# 可选值：trace, debug, info, warn, error
+# trace: 最详细的日志，包含所有信息
+# debug: 调试信息
+# info: 一般信息（推荐）
+# warn: 警告信息
+# error: 仅错误信息
+level = "info"
+
+# 是否将日志输出到文件
+file_output = false
+
+# 日志文件路径（当 file_output = true 时使用）
+log_file = "logs/distrender.log"
