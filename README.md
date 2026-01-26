@@ -1,4 +1,4 @@
-# DistRender - 分布式渲染引擎
+# DistRender - 渲染引擎
 
 一个支持多图形 API 的现代化渲染引擎，目前支持 Vulkan 和 DirectX 12。
 
