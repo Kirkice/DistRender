@@ -7,7 +7,7 @@ use super::MeshLoader;
 use crate::core::error::{MeshLoadError, Result};
 use crate::geometry::mesh::{MeshData, Subset};
 use crate::geometry::vertex::Vertex;
-use crate::geometry::math_utils::{reconstruct_normals, compute_tangent_space};
+use crate::geometry::math_utils::{reconstruct_normals, compute_tangent_space, smooth_normals_by_position};
 use std::path::Path;
 
 /// OBJ 格式加载器
@@ -156,6 +156,11 @@ impl MeshLoader for ObjLoader {
             tracing::info!("OBJ 文件缺少法线数据，正在重建...");
             reconstruct_normals(&mut mesh_data.vertices, &mesh_data.indices);
         }
+
+        // 后处理：seam 平滑处理（按 position 聚类法线）
+        // OBJ 常在 UV seam 处拆顶点，导致同位置不同法线，从而出现“切边”。
+        // 这里用一个小的 epsilon 将同一位置附近的顶点归为一组并平均法线。
+        smooth_normals_by_position(&mut mesh_data.vertices, 1e-5);
 
         // 后处理：计算切线空间（如果有UV坐标）
         if has_texcoords {

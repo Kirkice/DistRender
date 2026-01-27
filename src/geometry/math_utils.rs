@@ -89,6 +89,52 @@ pub fn reconstruct_normals(vertices: &mut [Vertex], indices: &[u32]) {
     }
 }
 
+pub fn smooth_normals_by_position(vertices: &mut [Vertex], epsilon: f32) {
+    if vertices.is_empty() {
+        return;
+    }
+
+    let eps = epsilon.max(0.0);
+    if eps == 0.0 {
+        return;
+    }
+
+    fn quantize(v: [f32; 3], eps: f32) -> (i32, i32, i32) {
+        (
+            (v[0] / eps).round() as i32,
+            (v[1] / eps).round() as i32,
+            (v[2] / eps).round() as i32,
+        )
+    }
+
+    use std::collections::HashMap;
+
+    let mut reference: HashMap<(i32, i32, i32), [f32; 3]> = HashMap::new();
+    let mut sums: HashMap<(i32, i32, i32), [f32; 3]> = HashMap::new();
+
+    for v in vertices.iter() {
+        let key = quantize(v.position, eps);
+        let ref_n = reference.entry(key).or_insert(v.normal);
+
+        let mut n = v.normal;
+        if dot(*ref_n, n) < 0.0 {
+            n = [-n[0], -n[1], -n[2]];
+        }
+
+        let entry = sums.entry(key).or_insert([0.0, 0.0, 0.0]);
+        entry[0] += n[0];
+        entry[1] += n[1];
+        entry[2] += n[2];
+    }
+
+    for v in vertices.iter_mut() {
+        let key = quantize(v.position, eps);
+        if let Some(sum) = sums.get(&key) {
+            v.normal = normalize(*sum);
+        }
+    }
+}
+
 /// 计算顶点的切线空间向量
 ///
 /// 使用UV坐标导数计算每个顶点的切线向量，用于法线贴图。

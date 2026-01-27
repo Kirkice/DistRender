@@ -118,19 +118,30 @@ impl Renderer {
                 GraphicsError::ResourceCreation(format!("Failed to create root signature: {:?}", e))
             ))?;
 
-            // 2. Shaders（分别读取 vertex.hlsl / fragment.hlsl）
+            // 2. Shaders（分别读取并编译 vertex.hlsl / fragment.hlsl）
             use std::fs;
-            let hlsl_path = "src/renderer/shaders/shader.hlsl";
-            let shaders_hlsl = fs::read_to_string(hlsl_path)
-                .expect("Failed to read shader.hlsl");
+            use std::path::PathBuf;
+
+            // Windows 下工作目录可能不是项目根目录，不能直接依赖相对路径。
+            // 用编译期项目根目录（CARGO_MANIFEST_DIR）来定位 shader 文件。
+            let shader_dir: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src/renderer/shaders");
+
+            let vs_path = shader_dir.join("vertex.hlsl");
+            let ps_path = shader_dir.join("fragment.hlsl");
+
+            let vs_hlsl = fs::read_to_string(&vs_path)
+                .unwrap_or_else(|e| panic!("Failed to read vertex.hlsl at {}: {}", vs_path.display(), e));
+            let ps_hlsl = fs::read_to_string(&ps_path)
+                .unwrap_or_else(|e| panic!("Failed to read fragment.hlsl at {}: {}", ps_path.display(), e));
 
             let mut vs_blob = None;
             let mut ps_blob = None;
             let mut error_blob = None;
 
             let result = D3DCompile(
-                shaders_hlsl.as_ptr() as _,
-                shaders_hlsl.len(),
+                vs_hlsl.as_ptr() as _,
+                vs_hlsl.len(),
                 None,
                 None,
                 None,
@@ -153,8 +164,8 @@ impl Renderer {
             }
 
             let result = D3DCompile(
-                shaders_hlsl.as_ptr() as _,
-                shaders_hlsl.len(),
+                ps_hlsl.as_ptr() as _,
+                ps_hlsl.len(),
                 None,
                 None,
                 None,
@@ -178,14 +189,23 @@ impl Renderer {
             let vs_blob = vs_blob.unwrap();
             let ps_blob = ps_blob.unwrap();
 
-            // 3. Input Layout (更新为 3D 顶点：vec3 position + vec3 color)
+            // 3. Input Layout (POSITION/NORMAL/COLOR)
             let input_element_descs = [
                 D3D12_INPUT_ELEMENT_DESC {
                     SemanticName: windows::core::s!("POSITION"),
                     SemanticIndex: 0,
-                    Format: DXGI_FORMAT_R32G32B32_FLOAT,  // vec3 而不是 vec2
+                    Format: DXGI_FORMAT_R32G32B32_FLOAT,
                     InputSlot: 0,
                     AlignedByteOffset: 0,
+                    InputSlotClass: D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
+                    InstanceDataStepRate: 0,
+                },
+                D3D12_INPUT_ELEMENT_DESC {
+                    SemanticName: windows::core::s!("NORMAL"),
+                    SemanticIndex: 0,
+                    Format: DXGI_FORMAT_R32G32B32_FLOAT,
+                    InputSlot: 0,
+                    AlignedByteOffset: 12,
                     InputSlotClass: D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
                     InstanceDataStepRate: 0,
                 },
@@ -194,7 +214,7 @@ impl Renderer {
                     SemanticIndex: 0,
                     Format: DXGI_FORMAT_R32G32B32_FLOAT,
                     InputSlot: 0,
-                    AlignedByteOffset: 12,  // 3 * 4 = 12 字节偏移
+                    AlignedByteOffset: 24,
                     InputSlotClass: D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
                     InstanceDataStepRate: 0,
                 },
