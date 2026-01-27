@@ -47,8 +47,8 @@ mod geometry;
 mod renderer;
 mod gfx;
 
-use core::{Config, log};
-use tracing::{info, error, debug};
+use core::{Config, SceneConfig, log};
+use tracing::{info, error, debug, warn};
 use renderer::Renderer;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -59,11 +59,12 @@ use winit::event_loop::{ControlFlow, EventLoop};
 ///
 /// # 初始化流程
 ///
-/// 1. 初始化日志系统
-/// 2. 加载配置文件（如果存在）
+/// 1. 加载引擎配置文件（config.toml）
+/// 2. 加载场景配置文件（scene.toml）
 /// 3. 应用命令行参数覆盖
-/// 4. 创建事件循环和渲染器
-/// 5. 启动主循环
+/// 4. 初始化日志系统
+/// 5. 创建事件循环和渲染器
+/// 6. 启动主循环
 ///
 /// # 命令行参数
 ///
@@ -103,7 +104,10 @@ fn main() {
     info!("DistRender starting...");
     info!(version = env!("CARGO_PKG_VERSION"), "Application initialized");
 
-    // 5. 输出配置信息
+    // 5. 加载场景配置
+    let scene = SceneConfig::from_file_or_default("scene.toml");
+
+    // 6. 输出配置信息
     info!(
         backend = ?config.graphics.backend,
         width = config.window.width,
@@ -111,11 +115,18 @@ fn main() {
         "Graphics configuration"
     );
 
-    // 6. 创建事件循环
+    info!(
+        camera_pos = ?scene.camera.transform.position,
+        camera_fov = scene.camera.fov,
+        model_path = %scene.model.path,
+        "Scene configuration"
+    );
+
+    // 7. 创建事件循环
     let event_loop = EventLoop::new();
 
-    // 7. 创建渲染器（传递配置）
-    let mut renderer = match Renderer::new(&event_loop, &config) {
+    // 8. 创建渲染器（传递配置和场景）
+    let mut renderer = match Renderer::new(&event_loop, &config, &scene) {
         Ok(r) => r,
         Err(e) => {
             error!("Failed to initialize renderer: {}", e);
@@ -124,10 +135,12 @@ fn main() {
         }
     };
 
+    info!("Scene configuration integrated with renderer successfully");
+
     info!("Renderer initialized successfully");
     info!("Entering main loop...");
 
-    // 8. 启动事件循环
+    // 9. 启动事件循环
     event_loop.run(move |event, _, control_flow| {
         match event {
             // 窗口关闭事件

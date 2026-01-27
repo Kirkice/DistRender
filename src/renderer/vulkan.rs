@@ -1,15 +1,16 @@
 use std::sync::Arc;
 use tracing::{trace, debug, info, warn, error};
-use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, TypedBufferAccess};
+use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, CpuBufferPool, TypedBufferAccess};
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo, SubpassContents,
 };
+use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::image::view::ImageView;
 use vulkano::image::{ImageAccess, ImageUsage, SwapchainImage};
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
-use vulkano::pipeline::GraphicsPipeline;
+use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
 use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
 use vulkano::swapchain::{
     acquire_next_image, AcquireError, Swapchain, SwapchainCreateInfo, SwapchainCreationError,
@@ -18,6 +19,7 @@ use vulkano::swapchain::{
 use vulkano::sync::{self, FlushError, GpuFuture};
 use winit::event_loop::EventLoop;
 use winit::window::Window;
+use bytemuck::{Pod, Zeroable};
 
 use crate::renderer::vertex::{MyVertex, create_default_triangle, convert_geometry_vertex};
 use crate::renderer::shaders::{vs, fs};
@@ -25,10 +27,32 @@ use crate::renderer::resource::FrameResourcePool;
 use crate::renderer::sync::{FenceManager, FenceValue};
 use crate::renderer::descriptor_vulkan::VulkanDescriptorManager;
 use crate::gfx::{GraphicsBackend, VulkanBackend as GfxDevice};
-use crate::core::Config;
+use crate::core::{Config, SceneConfig, Matrix4};
 use crate::core::error::{Result, DistRenderError, GraphicsError};
 use crate::geometry::loaders::{MeshLoader, ObjLoader};
 use std::path::Path;
+
+/// Uniform Buffer Object - MVP 矩阵数据
+///
+/// 这个结构体会被传输到 GPU 的 uniform buffer 中。
+/// 必须使用 #[repr(C)] 保证内存布局与着色器一致。
+#[repr(C)]
+#[derive(Default, Clone, Copy, Debug, Pod, Zeroable)]
+struct UniformBufferObject {
+    model: [[f32; 4]; 4],      // 模型矩阵 (4x4)
+    view: [[f32; 4]; 4],       // 视图矩阵 (4x4)
+    projection: [[f32; 4]; 4], // 投影矩阵 (4x4)
+}
+
+impl UniformBufferObject {
+    fn from_matrices(model: &Matrix4, view: &Matrix4, projection: &Matrix4) -> Self {
+        Self {
+            model: *model.as_ref(),
+            view: *view.as_ref(),
+            projection: *projection.as_ref(),
+        }
+    }
+}
 
 pub struct Renderer {
     gfx: GfxDevice,
@@ -37,6 +61,7 @@ pub struct Renderer {
     pipeline: Arc<GraphicsPipeline>,
     framebuffers: Vec<Arc<Framebuffer>>,
     vertex_buffer: Arc<CpuAccessibleBuffer<[MyVertex]>>,
+    index_buffer: Arc<CpuAccessibleBuffer<[u32]>>,
     viewport: Viewport,
     recreate_swapchain: bool,
     previous_frame_end: Option<Box<dyn GpuFuture>>,
@@ -47,10 +72,14 @@ pub struct Renderer {
     fence_manager: FenceManager,
     // 新增：描述符管理
     descriptor_manager: VulkanDescriptorManager,
+    // 新增：Uniform buffer pool
+    uniform_buffer_pool: CpuBufferPool<UniformBufferObject>,
+    // 新增：场景配置
+    scene: SceneConfig,
 }
 
 impl Renderer {
-    pub fn new(event_loop: &EventLoop<()>, config: &Config) -> Result<Self> {
+    pub fn new(event_loop: &EventLoop<()>, config: &Config, scene: &SceneConfig) -> Result<Self> {
         let gfx = GfxDevice::new(event_loop, config);
 
         let (swapchain, images) = {
@@ -113,8 +142,8 @@ impl Renderer {
         );
 
         // 加载 OBJ 模型文件
-        let obj_path = Path::new("assets/models/triangle.obj");
-        let vertices = if obj_path.exists() {
+        let obj_path = Path::new("assets/models/sphere.obj");
+        let (vertices, indices) = if obj_path.exists() {
             info!("Loading mesh from: {}", obj_path.display());
             match ObjLoader::load_from_file(obj_path) {
                 Ok(mesh_data) => {
@@ -124,20 +153,22 @@ impl Renderer {
                         mesh_data.index_count()
                     );
                     // 转换 GeometryVertex 为 MyVertex
-                    mesh_data
+                    let verts = mesh_data
                         .vertices
                         .iter()
                         .map(|v| convert_geometry_vertex(v))
-                        .collect::<Vec<_>>()
+                        .collect::<Vec<_>>();
+                    let inds = mesh_data.indices.clone();
+                    (verts, inds)
                 }
                 Err(e) => {
                     warn!("Failed to load OBJ file: {}, using default triangle", e);
-                    create_default_triangle().to_vec()
+                    (create_default_triangle().to_vec(), vec![0, 1, 2])
                 }
             }
         } else {
             warn!("OBJ file not found: {}, using default triangle", obj_path.display());
-            create_default_triangle().to_vec()
+            (create_default_triangle().to_vec(), vec![0, 1, 2])
         };
 
         let vertex_buffer = CpuAccessibleBuffer::from_iter(
@@ -152,6 +183,21 @@ impl Renderer {
         .map_err(|e| DistRenderError::Graphics(
             GraphicsError::ResourceCreation(format!("Failed to create vertex buffer: {:?}", e))
         ))?;
+
+        let index_buffer = CpuAccessibleBuffer::from_iter(
+            &gfx.memory_allocator,
+            BufferUsage {
+                index_buffer: true,
+                ..BufferUsage::empty()
+            },
+            false,
+            indices.into_iter(),
+        )
+        .map_err(|e| DistRenderError::Graphics(
+            GraphicsError::ResourceCreation(format!("Failed to create index buffer: {:?}", e))
+        ))?;
+
+        info!("Index buffer created: {} indices", index_buffer.len());
 
         let vs = vs::load(gfx.device.clone())
             .map_err(|e| DistRenderError::Graphics(
@@ -238,10 +284,14 @@ impl Renderer {
         // 初始化描述符管理器
         let descriptor_manager = VulkanDescriptorManager::new(gfx.device.clone());
 
+        // 初始化 Uniform Buffer Pool
+        let uniform_buffer_pool = CpuBufferPool::uniform_buffer(gfx.memory_allocator.clone());
+
         #[cfg(debug_assertions)]
         {
             info!("Vulkan Renderer initialized successfully with triple buffering");
             debug!("Descriptor manager initialized");
+            info!("Uniform buffer pool created");
         }
 
         Ok(Self {
@@ -251,12 +301,15 @@ impl Renderer {
             pipeline,
             framebuffers,
             vertex_buffer,
+            index_buffer,
             viewport,
             recreate_swapchain: false,
             previous_frame_end,
             frame_resource_pool,
             fence_manager,
             descriptor_manager,
+            uniform_buffer_pool,
+            scene: scene.clone(),
         })
     }
 
@@ -386,6 +439,36 @@ impl Renderer {
         #[cfg(debug_assertions)]
         trace!(image_index, "Building command buffer");
 
+        // 计算 MVP 矩阵
+        let aspect_ratio = self.viewport.dimensions[0] / self.viewport.dimensions[1];
+        let model = self.scene.model.transform.to_matrix();
+        let view = self.scene.camera.view_matrix();
+        let projection = self.scene.camera.projection_matrix(aspect_ratio);
+
+        let ubo = UniformBufferObject::from_matrices(&model, &view, &projection);
+
+        // 创建 uniform buffer
+        let uniform_subbuffer = self.uniform_buffer_pool
+            .from_data(ubo)
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::ResourceCreation(format!("Failed to create uniform buffer: {:?}", e))
+            ))?;
+
+        // 创建描述符集
+        let layout = self.pipeline.layout().set_layouts().get(0)
+            .ok_or_else(|| DistRenderError::Graphics(
+                GraphicsError::ResourceCreation("Pipeline has no descriptor set layouts".to_string())
+            ))?;
+
+        let descriptor_set = PersistentDescriptorSet::new(
+            &self.gfx.descriptor_allocator,
+            layout.clone(),
+            [WriteDescriptorSet::buffer(0, uniform_subbuffer)],
+        )
+        .map_err(|e| DistRenderError::Graphics(
+            GraphicsError::ResourceCreation(format!("Failed to create descriptor set: {:?}", e))
+        ))?;
+
         let mut builder = AutoCommandBufferBuilder::primary(
             &self.gfx.command_buffer_allocator,
             self.gfx.queue.queue_family_index(),
@@ -410,8 +493,15 @@ impl Renderer {
             ))?
             .set_viewport(0, [self.viewport.clone()].into_iter())
             .bind_pipeline_graphics(self.pipeline.clone())
+            .bind_descriptor_sets(
+                PipelineBindPoint::Graphics,
+                self.pipeline.layout().clone(),
+                0,
+                descriptor_set,
+            )
             .bind_vertex_buffers(0, self.vertex_buffer.clone())
-            .draw(self.vertex_buffer.len() as u32, 1, 0, 0)
+            .bind_index_buffer(self.index_buffer.clone())
+            .draw_indexed(self.index_buffer.len() as u32, 1, 0, 0, 0)
             .map_err(|e| DistRenderError::Graphics(
                 GraphicsError::CommandExecution(format!("Failed to record draw command: {:?}", e))
             ))?

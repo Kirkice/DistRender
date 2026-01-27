@@ -3,7 +3,7 @@ use std::mem::ManuallyDrop;
 use tracing::{trace, debug, info};
 use winit::event_loop::EventLoop;
 use crate::gfx::Dx12Backend;
-use crate::core::Config;
+use crate::core::{Config, SceneConfig, Matrix4};
 use crate::core::error::{Result, DistRenderError, GraphicsError};
 use crate::renderer::vertex::{MyVertex, create_default_triangle, convert_geometry_vertex};
 use crate::renderer::resource::FrameResourcePool;
@@ -20,6 +20,27 @@ use windows::Win32::System::Threading::WaitForSingleObject;
 
 const FRAME_COUNT: usize = 2;
 
+/// Uniform Buffer Object - MVP 矩阵数据
+///
+/// D3D12 要求常量缓冲区 256 字节对齐
+#[repr(C, align(256))]
+#[derive(Clone, Copy, Debug)]
+struct UniformBufferObject {
+    model: [[f32; 4]; 4],
+    view: [[f32; 4]; 4],
+    projection: [[f32; 4]; 4],
+}
+
+impl UniformBufferObject {
+    fn from_matrices(model: &Matrix4, view: &Matrix4, projection: &Matrix4) -> Self {
+        Self {
+            model: *model.as_ref(),
+            view: *view.as_ref(),
+            projection: *projection.as_ref(),
+        }
+    }
+}
+
 pub struct Renderer {
     gfx: Dx12Backend,
     root_signature: ID3D12RootSignature,
@@ -27,6 +48,11 @@ pub struct Renderer {
     #[allow(dead_code)]  // 保留供将来使用
     vertex_buffer: ID3D12Resource,
     vertex_buffer_view: D3D12_VERTEX_BUFFER_VIEW,
+    vertex_count: u32,
+    #[allow(dead_code)]  // 保留供将来使用
+    index_buffer: ID3D12Resource,
+    index_buffer_view: D3D12_INDEX_BUFFER_VIEW,
+    index_count: u32,
     viewport: D3D12_VIEWPORT,
     scissor_rect: RECT,
     command_allocators: [ID3D12CommandAllocator; FRAME_COUNT],
@@ -38,25 +64,53 @@ pub struct Renderer {
     fence_manager: FenceManager,
     // 描述符管理器
     descriptor_manager: Dx12DescriptorManager,
+    // 常量缓冲区（MVP 矩阵）
+    constant_buffer: ID3D12Resource,
+    constant_buffer_data: *mut u8,
+    // 场景配置
+    scene: SceneConfig,
 }
 
 impl Renderer {
-    pub fn new(event_loop: &EventLoop<()>, config: &Config) -> Result<Self> {
+    pub fn new(event_loop: &EventLoop<()>, config: &Config, scene: &SceneConfig) -> Result<Self> {
         let gfx = Dx12Backend::new(event_loop, config);
 
         unsafe {
-            // 1. Root Signature
-            // let mut root_signature: Option<ID3D12RootSignature> = None; <--- Removed this line
+            // 1. Root Signature（包含常量缓冲区描述符）
+            let root_parameters = [
+                D3D12_ROOT_PARAMETER {
+                    ParameterType: D3D12_ROOT_PARAMETER_TYPE_CBV,
+                    Anonymous: D3D12_ROOT_PARAMETER_0 {
+                        Descriptor: D3D12_ROOT_DESCRIPTOR {
+                            ShaderRegister: 0,  // b0
+                            RegisterSpace: 0,
+                        },
+                    },
+                    ShaderVisibility: D3D12_SHADER_VISIBILITY_VERTEX,
+                },
+            ];
+
             let root_desc = D3D12_ROOT_SIGNATURE_DESC {
+                NumParameters: root_parameters.len() as u32,
+                pParameters: root_parameters.as_ptr(),
+                NumStaticSamplers: 0,
+                pStaticSamplers: std::ptr::null(),
                 Flags: D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT,
-                ..Default::default()
             };
-            
+
             let mut signature = None;
-            D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &mut signature, None).unwrap();
+            D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &mut signature, None)
+                .map_err(|e| DistRenderError::Graphics(
+                    GraphicsError::ResourceCreation(format!("Failed to serialize root signature: {:?}", e))
+                ))?;
             let signature = signature.unwrap();
-            
-            let root_signature: ID3D12RootSignature = gfx.device.CreateRootSignature(0, std::slice::from_raw_parts(signature.GetBufferPointer() as _, signature.GetBufferSize())).unwrap();
+
+            let root_signature: ID3D12RootSignature = gfx.device.CreateRootSignature(
+                0,
+                std::slice::from_raw_parts(signature.GetBufferPointer() as _, signature.GetBufferSize())
+            ).map_err(|e| DistRenderError::Graphics(
+                GraphicsError::ResourceCreation(format!("Failed to create root signature: {:?}", e))
+            ))?;
 
             // 2. Shaders（从外部文件读取 HLSL）
             use std::fs;
@@ -118,12 +172,12 @@ impl Renderer {
             let vs_blob = vs_blob.unwrap();
             let ps_blob = ps_blob.unwrap();
 
-            // 3. Input Layout
+            // 3. Input Layout (更新为 3D 顶点：vec3 position + vec3 color)
             let input_element_descs = [
                 D3D12_INPUT_ELEMENT_DESC {
                     SemanticName: windows::core::s!("POSITION"),
                     SemanticIndex: 0,
-                    Format: DXGI_FORMAT_R32G32_FLOAT,
+                    Format: DXGI_FORMAT_R32G32B32_FLOAT,  // vec3 而不是 vec2
                     InputSlot: 0,
                     AlignedByteOffset: 0,
                     InputSlotClass: D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
@@ -134,7 +188,7 @@ impl Renderer {
                     SemanticIndex: 0,
                     Format: DXGI_FORMAT_R32G32B32_FLOAT,
                     InputSlot: 0,
-                    AlignedByteOffset: 8,
+                    AlignedByteOffset: 12,  // 3 * 4 = 12 字节偏移
                     InputSlotClass: D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
                     InstanceDataStepRate: 0,
                 },
@@ -205,8 +259,8 @@ impl Renderer {
             let pso: ID3D12PipelineState = gfx.device.CreateGraphicsPipelineState(&pso_desc).expect("Failed to create PSO");
 
             // 5. MyVertex Buffer - 加载 OBJ 模型文件
-            let obj_path = Path::new("assets/models/triangle.obj");
-            let vertices = if obj_path.exists() {
+            let obj_path = Path::new("assets/models/sphere.obj");
+            let (vertices, indices) = if obj_path.exists() {
                 info!("Loading mesh from: {}", obj_path.display());
                 match ObjLoader::load_from_file(obj_path) {
                     Ok(mesh_data) => {
@@ -216,20 +270,22 @@ impl Renderer {
                             mesh_data.index_count()
                         );
                         // 转换 GeometryVertex 为 MyVertex
-                        mesh_data
+                        let verts = mesh_data
                             .vertices
                             .iter()
                             .map(|v| convert_geometry_vertex(v))
-                            .collect::<Vec<_>>()
+                            .collect::<Vec<_>>();
+                        let inds = mesh_data.indices.clone();
+                        (verts, inds)
                     }
                     Err(e) => {
                         tracing::warn!("Failed to load OBJ file: {}, using default triangle", e);
-                        create_default_triangle().to_vec()
+                        (create_default_triangle().to_vec(), vec![0, 1, 2])
                     }
                 }
             } else {
                 tracing::warn!("OBJ file not found: {}, using default triangle", obj_path.display());
-                create_default_triangle().to_vec()
+                (create_default_triangle().to_vec(), vec![0, 1, 2])
             };
             let vertex_data_size = (std::mem::size_of::<MyVertex>() * vertices.len()) as u64;
 
@@ -270,6 +326,83 @@ impl Renderer {
                 SizeInBytes: vertex_data_size as u32,
                 StrideInBytes: std::mem::size_of::<MyVertex>() as u32,
             };
+
+            let vertex_count = vertices.len() as u32;
+
+            // 5.5. 创建索引缓冲区（Index Buffer）
+            let index_data_size = (std::mem::size_of::<u32>() * indices.len()) as u64;
+            let index_count = indices.len() as u32;
+
+            let ib_resource_desc = D3D12_RESOURCE_DESC {
+                Dimension: D3D12_RESOURCE_DIMENSION_BUFFER,
+                Width: index_data_size,
+                Height: 1,
+                DepthOrArraySize: 1,
+                MipLevels: 1,
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                Layout: D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+                ..Default::default()
+            };
+
+            let mut index_buffer: Option<ID3D12Resource> = None;
+            gfx.device.CreateCommittedResource(
+                &heap_props,
+                D3D12_HEAP_FLAG_NONE,
+                &ib_resource_desc,
+                D3D12_RESOURCE_STATE_GENERIC_READ,
+                None,
+                &mut index_buffer,
+            ).expect("Failed to create IB");
+            let index_buffer = index_buffer.unwrap();
+
+            // Copy index data
+            let mut ib_data = std::ptr::null_mut();
+            index_buffer.Map(0, None, Some(&mut ib_data)).unwrap();
+            std::ptr::copy_nonoverlapping(indices.as_ptr(), ib_data as *mut u32, indices.len());
+            index_buffer.Unmap(0, None);
+
+            let index_buffer_view = D3D12_INDEX_BUFFER_VIEW {
+                BufferLocation: index_buffer.GetGPUVirtualAddress(),
+                SizeInBytes: index_data_size as u32,
+                Format: DXGI_FORMAT_R32_UINT,
+            };
+
+            info!("Index buffer created: {} indices", index_count);
+
+            // 5.6. 创建常量缓冲区（Constant Buffer for MVP matrices）
+            let constant_buffer_size = std::mem::size_of::<UniformBufferObject>() as u64;
+
+            let cb_heap_props = D3D12_HEAP_PROPERTIES {
+                Type: D3D12_HEAP_TYPE_UPLOAD,
+                ..Default::default()
+            };
+            let cb_resource_desc = D3D12_RESOURCE_DESC {
+                Dimension: D3D12_RESOURCE_DIMENSION_BUFFER,
+                Width: constant_buffer_size,
+                Height: 1,
+                DepthOrArraySize: 1,
+                MipLevels: 1,
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                Layout: D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+                ..Default::default()
+            };
+
+            let mut constant_buffer: Option<ID3D12Resource> = None;
+            gfx.device.CreateCommittedResource(
+                &cb_heap_props,
+                D3D12_HEAP_FLAG_NONE,
+                &cb_resource_desc,
+                D3D12_RESOURCE_STATE_GENERIC_READ,
+                None,
+                &mut constant_buffer,
+            ).expect("Failed to create constant buffer");
+            let constant_buffer = constant_buffer.unwrap();
+
+            // Map 常量缓冲区以获取 CPU 指针
+            let mut constant_buffer_data = std::ptr::null_mut();
+            constant_buffer.Map(0, None, Some(&mut constant_buffer_data)).unwrap();
+
+            info!("Constant buffer created and mapped (size: {} bytes)", constant_buffer_size);
 
             // 6. Viewport/Scissor
              let viewport = D3D12_VIEWPORT {
@@ -341,6 +474,10 @@ impl Renderer {
                 pso,
                 vertex_buffer,
                 vertex_buffer_view,
+                vertex_count,
+                index_buffer,
+                index_buffer_view,
+                index_count,
                 viewport,
                 scissor_rect,
                 command_allocators,
@@ -348,6 +485,9 @@ impl Renderer {
                 frame_resource_pool,
                 fence_manager,
                 descriptor_manager,
+                constant_buffer,
+                constant_buffer_data: constant_buffer_data as *mut u8,
+                scene: scene.clone(),
             })
         }
     }
@@ -490,6 +630,21 @@ impl Renderer {
             self.command_list.Reset(allocator, Some(&self.pso))
                 .expect("Failed to reset CommandList");
 
+            // 计算 MVP 矩阵
+            let aspect_ratio = self.viewport.Width / self.viewport.Height;
+            let model = self.scene.model.transform.to_matrix();
+            let view = self.scene.camera.view_matrix();
+            let projection = self.scene.camera.projection_matrix(aspect_ratio);
+
+            let ubo = UniformBufferObject::from_matrices(&model, &view, &projection);
+
+            // 更新常量缓冲区数据
+            std::ptr::copy_nonoverlapping(
+                &ubo as *const UniformBufferObject as *const u8,
+                self.constant_buffer_data,
+                std::mem::size_of::<UniformBufferObject>()
+            );
+
             // Get render target resource
             let render_target: ID3D12Resource = self.gfx.swap_chain.GetBuffer(self.gfx.frame_index as u32)
                 .map_err(|e| DistRenderError::Graphics(GraphicsError::ResourceCreation(format!("Failed to get swap chain buffer: {:?}", e))))?;
@@ -516,16 +671,23 @@ impl Renderer {
             let clear_color = [0.0, 0.0, 0.2, 1.0]; // Dark Blue to distinguish
             self.command_list.ClearRenderTargetView(rtv_handle, &clear_color, None);
 
-            // Draw Triangle
+            // Draw
             self.command_list.SetGraphicsRootSignature(&self.root_signature);
             self.command_list.SetPipelineState(&self.pso);
             self.command_list.RSSetViewports(&[self.viewport]);
             self.command_list.RSSetScissorRects(&[self.scissor_rect]);
-            
+
+            // 设置常量缓冲区（Root Parameter 0）
+            self.command_list.SetGraphicsRootConstantBufferView(
+                0,  // Root parameter index
+                self.constant_buffer.GetGPUVirtualAddress()
+            );
+
             self.command_list.OMSetRenderTargets(1, Some(&rtv_handle), false, None);
             self.command_list.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             self.command_list.IASetVertexBuffers(0, Some(&[self.vertex_buffer_view]));
-            self.command_list.DrawInstanced(3, 1, 0, 0);
+            self.command_list.IASetIndexBuffer(Some(&self.index_buffer_view));
+            self.command_list.DrawIndexedInstanced(self.index_count, 1, 0, 0, 0);
 
             // Transition Barrier RenderTarget -> Present
             let barrier_back = D3D12_RESOURCE_BARRIER {
@@ -585,6 +747,16 @@ impl Renderer {
             trace!(frame_index, next_frame = self.gfx.frame_index, "Frame completed");
 
             Ok(())
+        }
+    }
+}
+
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        unsafe {
+            // Unmap 常量缓冲区
+            self.constant_buffer.Unmap(0, None);
+            debug!("DX12 Renderer dropped, constant buffer unmapped");
         }
     }
 }

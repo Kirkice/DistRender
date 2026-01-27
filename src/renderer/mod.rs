@@ -103,14 +103,14 @@ impl Renderer {
     ///
     /// let renderer = Renderer::new(&event_loop, &config);
     /// ```
-    pub fn new(event_loop: &EventLoop<()>, config: &Config) -> Result<Self> {
+    pub fn new(event_loop: &EventLoop<()>, config: &Config, scene: &crate::core::SceneConfig) -> Result<Self> {
         let backend = if config.graphics.backend.is_dx12() {
             info!("Initializing DX12 Backend");
-            let renderer = Dx12Renderer::new(event_loop, config)?;
+            let renderer = Dx12Renderer::new(event_loop, config, scene)?;
             Backend::Dx12(renderer)
         } else {
             info!("Initializing Vulkan Backend");
-            let renderer = VulkanRenderer::new(event_loop, config)?;
+            let renderer = VulkanRenderer::new(event_loop, config, scene)?;
             Backend::Vulkan(renderer)
         };
 

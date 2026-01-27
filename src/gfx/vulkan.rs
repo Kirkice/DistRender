@@ -20,6 +20,7 @@ use tracing::{trace, debug, info, warn, error};
 use vulkano::command_buffer::allocator::{
     StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo,
 };
+use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::device::physical::PhysicalDeviceType;
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo};
 use vulkano::instance::{Instance, InstanceCreateInfo};
@@ -61,6 +62,8 @@ pub struct VulkanBackend {
     pub memory_allocator: Arc<StandardMemoryAllocator>,
     /// 命令缓冲分配器
     pub command_buffer_allocator: StandardCommandBufferAllocator,
+    /// 描述符集分配器
+    pub descriptor_allocator: StandardDescriptorSetAllocator,
 }
 
 impl VulkanBackend {
@@ -196,11 +199,13 @@ impl VulkanBackend {
             device.clone(),
             StandardCommandBufferAllocatorCreateInfo::default(),
         );
+        let descriptor_allocator = StandardDescriptorSetAllocator::new(device.clone());
 
         #[cfg(debug_assertions)]
         {
             debug!("Memory allocator created");
             debug!("Command buffer allocator created");
+            debug!("Descriptor set allocator created");
             info!("Vulkan Backend initialization complete");
         }
 
@@ -211,6 +216,7 @@ impl VulkanBackend {
             surface,
             memory_allocator,
             command_buffer_allocator,
+            descriptor_allocator,
         }
     }
 }

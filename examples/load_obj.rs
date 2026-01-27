@@ -19,7 +19,7 @@ fn main() {
     println!("=== DistRender OBJ 加载器示例 ===\n");
 
     // 加载测试三角形
-    let obj_path = Path::new("assets/triangle.obj");
+    let obj_path = Path::new("assets/sphere.obj");
 
     println!("正在加载: {}", obj_path.display());
 

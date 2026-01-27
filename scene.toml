@@ -1,0 +1,24 @@
+# DistRender 场景配置文件
+# 定义相机和模型的变换、投影参数等
+
+[camera]
+# 相机变换
+[camera.transform]
+position = [0.0, 0.0, 3.0]  # 相机位置 (x, y, z) - 在+Z方向
+rotation = [0.0, 0.0, 0.0]  # 相机旋转（欧拉角，度数）(pitch, yaw, roll) - 默认朝向-Z
+scale = [1.0, 1.0, 1.0]     # 相机缩放（通常保持为 1）
+
+# 相机投影参数
+fov = 60.0        # 视野角度（Field of View，度数）
+near_clip = 0.1   # 近裁剪面
+far_clip = 100.0  # 远裁剪面
+
+[model]
+# 模型文件路径
+path = "assets/models/sphere.obj"
+
+# 模型变换
+[model.transform]
+position = [0.0, 0.0, 0.0]  # 模型位置
+rotation = [0.0, 0.0, 0.0]  # 模型旋转（欧拉角，度数）
+scale = [1.0, 1.0, 1.0]     # 模型缩放

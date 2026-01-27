@@ -10,6 +10,7 @@
 //! - `config`：配置管理，支持从配置文件加载引擎设置
 //! - `error`：错误处理，定义统一的错误类型
 //! - `event`：事件系统，提供统一的事件处理机制
+//! - `scene`：场景配置，管理相机和模型的变换数据
 //!
 //! # 设计理念
 //!
@@ -24,6 +25,7 @@ pub mod log;
 pub mod config;
 pub mod error;
 pub mod event;
+pub mod scene;
 
 // 重新导出常用类型，方便使用
 pub use math::{Vector2, Vector3, Vector4, Matrix4, Quaternion, Color};
@@ -36,3 +38,4 @@ pub use event::{
     KeyboardEvent, KeyCode,
     TickEvent, DrawEvent,
 };
+pub use scene::{SceneConfig, CameraConfig, ModelConfig, Transform};

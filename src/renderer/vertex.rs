@@ -21,32 +21,32 @@ use crate::core::math::{Vector2, Vector3};
 /// # 内存布局
 ///
 /// 使用 `#[repr(C)]` 保证内存布局的一致性：
-/// - `position`：前 8 字节（2 个 f32）
+/// - `position`：前 12 字节（3 个 f32）
 /// - `color`：后 12 字节（3 个 f32）
 ///
-/// 总大小：20 字节
+/// 总大小：24 字节
 ///
 /// # 字段说明
 ///
-/// - `position`：顶点在 2D 空间中的位置 [x, y]
+/// - `position`：顶点在 3D 空间中的位置 [x, y, z]
 /// - `color`：顶点的 RGB 颜色值，范围 [0.0, 1.0]
 ///
 /// # 示例
 ///
 /// ```
 /// # use crate::renderer::vertex::MyVertex;
-/// # use crate::core::math::{Vector2, Vector3};
+/// # use crate::core::math::Vector3;
 /// // 使用数学库类型创建顶点
 /// let vertex = MyVertex::from_vectors(
-///     Vector2::new(0.0, 0.0),
+///     Vector3::new(0.0, 0.0, 0.0),
 ///     Vector3::new(1.0, 0.0, 0.0)
 /// );
 /// ```
 #[repr(C)]
 #[derive(Default, Clone, Copy, Debug, Pod, Zeroable)]
 pub struct MyVertex {
-    /// 顶点位置（2D 坐标）
-    pub position: [f32; 2],
+    /// 顶点位置（3D 坐标）
+    pub position: [f32; 3],
     /// 顶点颜色（RGB，范围 0.0-1.0）
     pub color: [f32; 3],
 }
@@ -61,15 +61,15 @@ impl MyVertex {
     ///
     /// ```
     /// # use crate::renderer::vertex::MyVertex;
-    /// # use crate::core::math::{Vector2, Vector3};
+    /// # use crate::core::math::Vector3;
     /// let vertex = MyVertex::from_vectors(
-    ///     Vector2::new(1.0, 2.0),
+    ///     Vector3::new(1.0, 2.0, 3.0),
     ///     Vector3::new(1.0, 0.5, 0.0)
     /// );
     /// ```
-    pub fn from_vectors(position: Vector2, color: Vector3) -> Self {
+    pub fn from_vectors(position: Vector3, color: Vector3) -> Self {
         Self {
-            position: [position.x, position.y],
+            position: [position.x, position.y, position.z],
             color: [color.x, color.y, color.z],
         }
     }
@@ -80,11 +80,11 @@ impl MyVertex {
     ///
     /// ```
     /// # use crate::renderer::vertex::MyVertex;
-    /// let vertex = MyVertex::new(1.0, 2.0, 1.0, 0.5, 0.0);
+    /// let vertex = MyVertex::new(1.0, 2.0, 3.0, 1.0, 0.5, 0.0);
     /// ```
-    pub fn new(px: f32, py: f32, r: f32, g: f32, b: f32) -> Self {
+    pub fn new(px: f32, py: f32, pz: f32, r: f32, g: f32, b: f32) -> Self {
         Self {
-            position: [px, py],
+            position: [px, py, pz],
             color: [r, g, b],
         }
     }
@@ -98,9 +98,9 @@ impl MyVertex {
 /// # 返回值
 ///
 /// 返回包含三个顶点的数组：
-/// - 顶点 1：顶部中心 (0.0, 0.5)，红色
-/// - 顶点 2：右下角 (0.5, -0.5)，绿色
-/// - 顶点 3：左下角 (-0.5, -0.5)，蓝色
+/// - 顶点 1：顶部中心 (0.0, 0.5, 0.0)，红色
+/// - 顶点 2：右下角 (0.5, -0.5, 0.0)，绿色
+/// - 顶点 3：左下角 (-0.5, -0.5, 0.0)，蓝色
 ///
 /// # 示例
 ///
@@ -112,15 +112,15 @@ impl MyVertex {
 pub fn create_default_triangle() -> [MyVertex; 3] {
     [
         MyVertex::from_vectors(
-            Vector2::new(0.0, 0.5),
+            Vector3::new(0.0, 0.5, 0.0),
             Vector3::new(1.0, 0.0, 0.0)  // 红色
         ),
         MyVertex::from_vectors(
-            Vector2::new(0.5, -0.5),
+            Vector3::new(0.5, -0.5, 0.0),
             Vector3::new(0.0, 1.0, 0.0)  // 绿色
         ),
         MyVertex::from_vectors(
-            Vector2::new(-0.5, -0.5),
+            Vector3::new(-0.5, -0.5, 0.0),
             Vector3::new(0.0, 0.0, 1.0)  // 蓝色
         ),
     ]
@@ -128,8 +128,8 @@ pub fn create_default_triangle() -> [MyVertex; 3] {
 
 /// 将 GeometryVertex 转换为 MyVertex
 ///
-/// 将 3D 模型顶点转换为 2D 渲染顶点。
-/// - 使用 x, y 坐标作为 2D 位置
+/// 将 3D 模型顶点转换为渲染顶点。
+/// - 使用完整的 3D 位置
 /// - 使用法线的绝对值作为颜色（简单的可视化方式）
 ///
 /// # 参数
@@ -138,10 +138,14 @@ pub fn create_default_triangle() -> [MyVertex; 3] {
 ///
 /// # 返回值
 ///
-/// 转换后的 2D 渲染顶点
+/// 转换后的渲染顶点
 pub fn convert_geometry_vertex(geo_vertex: &GeometryVertex) -> MyVertex {
     MyVertex {
-        position: [geo_vertex.position[0], geo_vertex.position[1]],
+        position: [
+            geo_vertex.position[0],
+            geo_vertex.position[1],
+            geo_vertex.position[2],
+        ],
         color: [
             geo_vertex.normal[0].abs(),
             geo_vertex.normal[1].abs(),
@@ -174,29 +178,30 @@ mod tests {
     #[test]
     fn test_vertex_layout() {
         // 验证顶点结构的大小和对齐
-        assert_eq!(mem::size_of::<MyVertex>(), 20, "Vertex size should be 20 bytes");
+        assert_eq!(mem::size_of::<MyVertex>(), 24, "Vertex size should be 24 bytes");
         assert_eq!(mem::align_of::<MyVertex>(), 4, "Vertex alignment should be 4 bytes");
 
         // 验证字段偏移量
         let vertex = MyVertex::default();
         let vertex_ptr = &vertex as *const MyVertex as usize;
-        let position_ptr = &vertex.position as *const [f32; 2] as usize;
+        let position_ptr = &vertex.position as *const [f32; 3] as usize;
         let color_ptr = &vertex.color as *const [f32; 3] as usize;
 
         assert_eq!(position_ptr - vertex_ptr, 0, "position should be at offset 0");
-        assert_eq!(color_ptr - vertex_ptr, 8, "color should be at offset 8");
+        assert_eq!(color_ptr - vertex_ptr, 12, "color should be at offset 12");
     }
 
     #[test]
     fn test_vertex_creation() {
         // 测试使用 Vector 类型创建顶点
         let vertex = MyVertex::from_vectors(
-            Vector2::new(1.0, 2.0),
+            Vector3::new(1.0, 2.0, 3.0),
             Vector3::new(1.0, 0.5, 0.0)
         );
 
         assert_eq!(vertex.position[0], 1.0);
         assert_eq!(vertex.position[1], 2.0);
+        assert_eq!(vertex.position[2], 3.0);
         assert_eq!(vertex.color[0], 1.0);
         assert_eq!(vertex.color[1], 0.5);
         assert_eq!(vertex.color[2], 0.0);
@@ -205,10 +210,11 @@ mod tests {
     #[test]
     fn test_vertex_new() {
         // 测试使用原始值创建顶点
-        let vertex = MyVertex::new(1.0, 2.0, 1.0, 0.5, 0.0);
+        let vertex = MyVertex::new(1.0, 2.0, 3.0, 1.0, 0.5, 0.0);
 
         assert_eq!(vertex.position[0], 1.0);
         assert_eq!(vertex.position[1], 2.0);
+        assert_eq!(vertex.position[2], 3.0);
         assert_eq!(vertex.color[0], 1.0);
         assert_eq!(vertex.color[1], 0.5);
         assert_eq!(vertex.color[2], 0.0);
@@ -226,10 +232,10 @@ mod tests {
 
         // 验证可以转换为字节切片
         let vertex = MyVertex::from_vectors(
-            Vector2::new(1.0, 2.0),
+            Vector3::new(1.0, 2.0, 3.0),
             Vector3::new(1.0, 0.5, 0.0)
         );
         let bytes: &[u8] = bytemuck::bytes_of(&vertex);
-        assert_eq!(bytes.len(), 20);
+        assert_eq!(bytes.len(), 24);
     }
 }
