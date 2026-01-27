@@ -23,6 +23,7 @@ use crate::renderer::vertex::{MyVertex, create_default_triangle};
 use crate::renderer::shaders::{vs, fs};
 use crate::renderer::resource::FrameResourcePool;
 use crate::renderer::sync::{FenceManager, FenceValue};
+use crate::renderer::descriptor_vulkan::VulkanDescriptorManager;
 use crate::gfx::{GraphicsBackend, VulkanBackend as GfxDevice};
 use crate::core::Config;
 use crate::core::error::{Result, DistRenderError, GraphicsError};
@@ -42,6 +43,8 @@ pub struct Renderer {
     frame_resource_pool: FrameResourcePool,
     // 新增：Fence同步管理
     fence_manager: FenceManager,
+    // 新增：描述符管理
+    descriptor_manager: VulkanDescriptorManager,
 }
 
 impl Renderer {
@@ -205,8 +208,14 @@ impl Renderer {
         // 初始化Fence管理器
         let fence_manager = FenceManager::new();
 
+        // 初始化描述符管理器
+        let descriptor_manager = VulkanDescriptorManager::new(gfx.device.clone());
+
         #[cfg(debug_assertions)]
-        info!("Vulkan Renderer initialized successfully with triple buffering");
+        {
+            info!("Vulkan Renderer initialized successfully with triple buffering");
+            debug!("Descriptor manager initialized");
+        }
 
         Ok(Self {
             gfx,
@@ -220,6 +229,7 @@ impl Renderer {
             previous_frame_end,
             frame_resource_pool,
             fence_manager,
+            descriptor_manager,
         })
     }
 

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::mem::ManuallyDrop;
-use tracing::{trace, debug, info, warn, error};
+use tracing::{trace, debug, info};
 use winit::event_loop::EventLoop;
 use crate::gfx::Dx12Backend;
 use crate::core::Config;
@@ -8,6 +8,7 @@ use crate::core::error::{Result, DistRenderError, GraphicsError};
 use crate::renderer::vertex::{MyVertex, create_default_triangle};
 use crate::renderer::resource::FrameResourcePool;
 use crate::renderer::sync::{FenceManager, FenceValue};
+use crate::renderer::descriptor_dx12::Dx12DescriptorManager;
 use windows::Win32::Graphics::Dxgi::{DXGI_PRESENT, DXGI_SWAP_CHAIN_FLAG, Common::*};
 use windows::Win32::Graphics::Direct3D12::*;
 use windows::Win32::Graphics::Direct3D::Fxc::*;
@@ -33,6 +34,8 @@ pub struct Renderer {
     frame_resource_pool: FrameResourcePool,
     // 使用新的Fence管理器
     fence_manager: FenceManager,
+    // 描述符管理器
+    descriptor_manager: Dx12DescriptorManager,
 }
 
 impl Renderer {
@@ -286,8 +289,24 @@ impl Renderer {
             // 初始化Fence管理器
             let fence_manager = FenceManager::new();
 
+            // 初始化描述符管理器
+            let mut descriptor_manager = Dx12DescriptorManager::new();
+
+            // 初始化 RTV 堆（交换链缓冲数量）
+            descriptor_manager.init_rtv_heap(&gfx.device, FRAME_COUNT as u32)?;
+
+            // 初始化 DSV 堆（至少1个深度缓冲）
+            descriptor_manager.init_dsv_heap(&gfx.device, 1)?;
+
+            // 初始化 SRV/CBV/UAV 堆（预分配128个描述符，参考 DistEngine）
+            descriptor_manager.init_srv_cbv_uav_heap(&gfx.device, 128)?;
+
             #[cfg(debug_assertions)]
-            info!("DX12 Renderer initialized successfully with double buffering");
+            {
+                info!("DX12 Renderer initialized successfully with double buffering");
+                debug!("Descriptor heaps initialized: RTV={}, DSV={}, SRV/CBV/UAV={}",
+                    FRAME_COUNT, 1, 128);
+            }
 
             Ok(Self {
                 gfx,
@@ -301,6 +320,7 @@ impl Renderer {
                 command_list,
                 frame_resource_pool,
                 fence_manager,
+                descriptor_manager,
             })
         }
     }

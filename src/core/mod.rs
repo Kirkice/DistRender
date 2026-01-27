@@ -9,6 +9,7 @@
 //! - `log`：日志系统，提供结构化的日志记录功能
 //! - `config`：配置管理，支持从配置文件加载引擎设置
 //! - `error`：错误处理，定义统一的错误类型
+//! - `event`：事件系统，提供统一的事件处理机制
 //!
 //! # 设计理念
 //!
@@ -22,8 +23,16 @@ pub mod math;
 pub mod log;
 pub mod config;
 pub mod error;
+pub mod event;
 
 // 重新导出常用类型，方便使用
 pub use math::{Vector2, Vector3, Vector4, Matrix4, Quaternion, Color};
 pub use error::{Result, DistRenderError};
 pub use config::Config;
+pub use event::{
+    Event, EventType, EventDispatcher, EventHandler,
+    WindowResizeEvent, WindowCloseEvent,
+    MouseButtonEvent, MouseMoveEvent, MouseScrollEvent, MouseButton,
+    KeyboardEvent, KeyCode,
+    TickEvent, DrawEvent,
+};

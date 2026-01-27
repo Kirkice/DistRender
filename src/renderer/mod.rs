@@ -37,6 +37,9 @@ pub mod shaders;
 pub mod resource;
 pub mod sync;
 pub mod command;
+pub mod descriptor;
+pub mod descriptor_dx12;
+pub mod descriptor_vulkan;
 pub mod vulkan;
 pub mod dx12;
 
