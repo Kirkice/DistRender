@@ -32,3 +32,7 @@ toml = "0.8"
 # 错误处理
 anyhow = "1.0"
 
+# 几何加载器
+tobj = "4.0"  # OBJ 文件加载（tinyobjloader Rust 移植）
+# russimp = "2.0"  # Assimp Rust 绑定（支持 FBX 等格式）- Phase 4 将添加
+

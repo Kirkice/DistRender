@@ -43,6 +43,7 @@
 //! - `gfx`：图形后端模块，封装不同的图形 API
 
 mod core;
+mod geometry;
 mod renderer;
 mod gfx;
 

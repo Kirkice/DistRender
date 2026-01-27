@@ -126,9 +126,45 @@ pub fn create_default_triangle() -> [MyVertex; 3] {
     ]
 }
 
+/// 将 GeometryVertex 转换为 MyVertex
+///
+/// 将 3D 模型顶点转换为 2D 渲染顶点。
+/// - 使用 x, y 坐标作为 2D 位置
+/// - 使用法线的绝对值作为颜色（简单的可视化方式）
+///
+/// # 参数
+///
+/// - `geo_vertex`: 3D 几何体顶点
+///
+/// # 返回值
+///
+/// 转换后的 2D 渲染顶点
+pub fn convert_geometry_vertex(geo_vertex: &GeometryVertex) -> MyVertex {
+    MyVertex {
+        position: [geo_vertex.position[0], geo_vertex.position[1]],
+        color: [
+            geo_vertex.normal[0].abs(),
+            geo_vertex.normal[1].abs(),
+            geo_vertex.normal[2].abs(),
+        ],
+    }
+}
+
 // 实现 Vulkano 的顶点特征
 // 这个宏会自动生成必要的代码，告诉 Vulkan 如何解释顶点数据
 vulkano::impl_vertex!(MyVertex, position, color);
+
+// ==================== 几何体顶点支持 ====================
+
+/// 重新导出 geometry 模块的完整顶点定义
+///
+/// 这个顶点结构包含更多属性（位置、法线、UV、切线），
+/// 用于加载和渲染 3D 模型（OBJ、FBX 等格式）。
+pub use crate::geometry::vertex::Vertex as GeometryVertex;
+
+// 为 GeometryVertex 实现 Vulkano 的顶点 trait
+// 这使得 Vulkan 能够理解如何从顶点缓冲区读取这些属性
+vulkano::impl_vertex!(GeometryVertex, position, normal, texcoord, tangent);
 
 #[cfg(test)]
 mod tests {

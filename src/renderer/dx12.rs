@@ -5,10 +5,12 @@ use winit::event_loop::EventLoop;
 use crate::gfx::Dx12Backend;
 use crate::core::Config;
 use crate::core::error::{Result, DistRenderError, GraphicsError};
-use crate::renderer::vertex::{MyVertex, create_default_triangle};
+use crate::renderer::vertex::{MyVertex, create_default_triangle, convert_geometry_vertex};
 use crate::renderer::resource::FrameResourcePool;
 use crate::renderer::sync::{FenceManager, FenceValue};
 use crate::renderer::descriptor_dx12::Dx12DescriptorManager;
+use crate::geometry::loaders::{MeshLoader, ObjLoader};
+use std::path::Path;
 use windows::Win32::Graphics::Dxgi::{DXGI_PRESENT, DXGI_SWAP_CHAIN_FLAG, Common::*};
 use windows::Win32::Graphics::Direct3D12::*;
 use windows::Win32::Graphics::Direct3D::Fxc::*;
@@ -202,8 +204,33 @@ impl Renderer {
 
             let pso: ID3D12PipelineState = gfx.device.CreateGraphicsPipelineState(&pso_desc).expect("Failed to create PSO");
 
-            // 5. MyVertex Buffer - 使用公共函数创建默认三角形顶点数据
-            let vertices = create_default_triangle();
+            // 5. MyVertex Buffer - 加载 OBJ 模型文件
+            let obj_path = Path::new("assets/models/triangle.obj");
+            let vertices = if obj_path.exists() {
+                info!("Loading mesh from: {}", obj_path.display());
+                match ObjLoader::load_from_file(obj_path) {
+                    Ok(mesh_data) => {
+                        info!(
+                            "Mesh loaded successfully: {} vertices, {} indices",
+                            mesh_data.vertex_count(),
+                            mesh_data.index_count()
+                        );
+                        // 转换 GeometryVertex 为 MyVertex
+                        mesh_data
+                            .vertices
+                            .iter()
+                            .map(|v| convert_geometry_vertex(v))
+                            .collect::<Vec<_>>()
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to load OBJ file: {}, using default triangle", e);
+                        create_default_triangle().to_vec()
+                    }
+                }
+            } else {
+                tracing::warn!("OBJ file not found: {}, using default triangle", obj_path.display());
+                create_default_triangle().to_vec()
+            };
             let vertex_data_size = (std::mem::size_of::<MyVertex>() * vertices.len()) as u64;
 
             let heap_props = D3D12_HEAP_PROPERTIES {

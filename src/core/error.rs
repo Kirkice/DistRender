@@ -10,6 +10,7 @@
 //! - 易于模式匹配和错误处理
 
 use std::fmt;
+use std::path::PathBuf;
 
 /// 引擎统一的 Result 类型
 ///
@@ -26,6 +27,9 @@ pub enum DistRenderError {
 
     /// 图形 API 错误
     Graphics(GraphicsError),
+
+    /// 网格加载错误
+    MeshLoading(MeshLoadError),
 
     /// IO 错误
     Io(std::io::Error),
@@ -75,11 +79,34 @@ pub enum GraphicsError {
     CommandExecution(String),
 }
 
+/// 网格加载相关的错误
+#[derive(Debug)]
+pub enum MeshLoadError {
+    /// 文件不存在
+    FileNotFound(PathBuf),
+
+    /// 不支持的文件格式
+    UnsupportedFormat(String),
+
+    /// 解析失败
+    ParseError(String),
+
+    /// 数据验证失败
+    ValidationError(String),
+
+    /// 几何数据无效
+    InvalidGeometry(String),
+
+    /// 外部库错误
+    ExternalLibraryError(String),
+}
+
 impl fmt::Display for DistRenderError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DistRenderError::Config(e) => write!(f, "Configuration error: {}", e),
             DistRenderError::Graphics(e) => write!(f, "Graphics error: {}", e),
+            DistRenderError::MeshLoading(e) => write!(f, "Mesh loading error: {}", e),
             DistRenderError::Io(e) => write!(f, "IO error: {}", e),
             DistRenderError::Log(msg) => write!(f, "Log error: {}", msg),
             DistRenderError::Initialization(msg) => write!(f, "Initialization error: {}", msg),
@@ -113,6 +140,19 @@ impl fmt::Display for GraphicsError {
     }
 }
 
+impl fmt::Display for MeshLoadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MeshLoadError::FileNotFound(path) => write!(f, "Mesh file not found: {}", path.display()),
+            MeshLoadError::UnsupportedFormat(msg) => write!(f, "Unsupported mesh format: {}", msg),
+            MeshLoadError::ParseError(msg) => write!(f, "Failed to parse mesh: {}", msg),
+            MeshLoadError::ValidationError(msg) => write!(f, "Mesh validation failed: {}", msg),
+            MeshLoadError::InvalidGeometry(msg) => write!(f, "Invalid geometry data: {}", msg),
+            MeshLoadError::ExternalLibraryError(msg) => write!(f, "External library error: {}", msg),
+        }
+    }
+}
+
 impl std::error::Error for DistRenderError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
@@ -124,6 +164,7 @@ impl std::error::Error for DistRenderError {
 
 impl std::error::Error for ConfigError {}
 impl std::error::Error for GraphicsError {}
+impl std::error::Error for MeshLoadError {}
 
 // 实现 From trait 以便于错误转换
 impl From<std::io::Error> for DistRenderError {
@@ -141,5 +182,11 @@ impl From<ConfigError> for DistRenderError {
 impl From<GraphicsError> for DistRenderError {
     fn from(err: GraphicsError) -> Self {
         DistRenderError::Graphics(err)
+    }
+}
+
+impl From<MeshLoadError> for DistRenderError {
+    fn from(err: MeshLoadError) -> Self {
+        DistRenderError::MeshLoading(err)
     }
 }

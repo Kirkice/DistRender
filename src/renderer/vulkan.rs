@@ -19,7 +19,7 @@ use vulkano::sync::{self, FlushError, GpuFuture};
 use winit::event_loop::EventLoop;
 use winit::window::Window;
 
-use crate::renderer::vertex::{MyVertex, create_default_triangle};
+use crate::renderer::vertex::{MyVertex, create_default_triangle, convert_geometry_vertex};
 use crate::renderer::shaders::{vs, fs};
 use crate::renderer::resource::FrameResourcePool;
 use crate::renderer::sync::{FenceManager, FenceValue};
@@ -27,6 +27,8 @@ use crate::renderer::descriptor_vulkan::VulkanDescriptorManager;
 use crate::gfx::{GraphicsBackend, VulkanBackend as GfxDevice};
 use crate::core::Config;
 use crate::core::error::{Result, DistRenderError, GraphicsError};
+use crate::geometry::loaders::{MeshLoader, ObjLoader};
+use std::path::Path;
 
 pub struct Renderer {
     gfx: GfxDevice,
@@ -110,8 +112,33 @@ impl Renderer {
             "Swapchain created"
         );
 
-        // 使用公共函数创建默认三角形顶点数据
-        let vertices = create_default_triangle();
+        // 加载 OBJ 模型文件
+        let obj_path = Path::new("assets/models/triangle.obj");
+        let vertices = if obj_path.exists() {
+            info!("Loading mesh from: {}", obj_path.display());
+            match ObjLoader::load_from_file(obj_path) {
+                Ok(mesh_data) => {
+                    info!(
+                        "Mesh loaded successfully: {} vertices, {} indices",
+                        mesh_data.vertex_count(),
+                        mesh_data.index_count()
+                    );
+                    // 转换 GeometryVertex 为 MyVertex
+                    mesh_data
+                        .vertices
+                        .iter()
+                        .map(|v| convert_geometry_vertex(v))
+                        .collect::<Vec<_>>()
+                }
+                Err(e) => {
+                    warn!("Failed to load OBJ file: {}, using default triangle", e);
+                    create_default_triangle().to_vec()
+                }
+            }
+        } else {
+            warn!("OBJ file not found: {}, using default triangle", obj_path.display());
+            create_default_triangle().to_vec()
+        };
 
         let vertex_buffer = CpuAccessibleBuffer::from_iter(
             &gfx.memory_allocator,
@@ -120,7 +147,7 @@ impl Renderer {
                 ..BufferUsage::empty()
             },
             false,
-            vertices,
+            vertices.into_iter(),
         )
         .map_err(|e| DistRenderError::Graphics(
             GraphicsError::ResourceCreation(format!("Failed to create vertex buffer: {:?}", e))
