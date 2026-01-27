@@ -39,17 +39,23 @@ use std::path::Path;
 #[repr(C)]
 #[derive(Default, Clone, Copy, Debug, Pod, Zeroable)]
 struct UniformBufferObject {
-    model: [[f32; 4]; 4],      // 模型矩阵 (4x4)
-    view: [[f32; 4]; 4],       // 视图矩阵 (4x4)
-    projection: [[f32; 4]; 4], // 投影矩阵 (4x4)
+    model: [[f32; 4]; 4],
+    view: [[f32; 4]; 4],
+    projection: [[f32; 4]; 4],
+    light_dir: [f32; 4],
+    light_color: [f32; 4],
+    camera_pos: [f32; 4],
 }
 
 impl UniformBufferObject {
-    fn from_matrices(model: &Matrix4, view: &Matrix4, projection: &Matrix4) -> Self {
+    fn new(model: &Matrix4, view: &Matrix4, projection: &Matrix4, light_dir: [f32;3], light_color_intensity: [f32;4], camera_pos: [f32;3]) -> Self {
         Self {
             model: *model.as_ref(),
             view: *view.as_ref(),
             projection: *projection.as_ref(),
+            light_dir: [light_dir[0], light_dir[1], light_dir[2], 0.0],
+            light_color: light_color_intensity,
+            camera_pos: [camera_pos[0], camera_pos[1], camera_pos[2], 0.0],
         }
     }
 }
@@ -445,7 +451,32 @@ impl Renderer {
         let view = self.scene.camera.view_matrix();
         let projection = self.scene.camera.projection_matrix(aspect_ratio);
 
-        let ubo = UniformBufferObject::from_matrices(&model, &view, &projection);
+        // 计算灯光参数
+        let light_rot = self.scene.light.transform.rotation;
+        let pitch = light_rot[0].to_radians();
+        let yaw = light_rot[1].to_radians();
+        let dir = nalgebra::Vector3::new(
+            yaw.sin() * pitch.cos(),
+            -pitch.sin(),
+            -yaw.cos() * pitch.cos(),
+        ).normalize();
+        let light_color = self.scene.light.color;
+        let intensity = self.scene.light.intensity;
+        let light_col_int = [
+            light_color[0] * intensity,
+            light_color[1] * intensity,
+            light_color[2] * intensity,
+            intensity,
+        ];
+        let camera_pos = self.scene.camera.transform.position;
+        let ubo = UniformBufferObject::new(
+            &model,
+            &view,
+            &projection,
+            [dir.x, dir.y, dir.z],
+            light_col_int,
+            camera_pos,
+        );
 
         // 创建 uniform buffer
         let uniform_subbuffer = self.uniform_buffer_pool

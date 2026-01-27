@@ -29,14 +29,20 @@ struct UniformBufferObject {
     model: [[f32; 4]; 4],
     view: [[f32; 4]; 4],
     projection: [[f32; 4]; 4],
+    light_dir: [f32; 4],
+    light_color: [f32; 4],
+    camera_pos: [f32; 4],
 }
 
 impl UniformBufferObject {
-    fn from_matrices(model: &Matrix4, view: &Matrix4, projection: &Matrix4) -> Self {
+    fn new(model: &Matrix4, view: &Matrix4, projection: &Matrix4, light_dir:[f32;3], light_color:[f32;4], camera_pos:[f32;3]) -> Self {
         Self {
             model: *model.as_ref(),
             view: *view.as_ref(),
             projection: *projection.as_ref(),
+            light_dir: [light_dir[0],light_dir[1],light_dir[2],0.0],
+            light_color,
+            camera_pos: [camera_pos[0],camera_pos[1],camera_pos[2],0.0],
         }
     }
 }
@@ -86,7 +92,7 @@ impl Renderer {
                             RegisterSpace: 0,
                         },
                     },
-                    ShaderVisibility: D3D12_SHADER_VISIBILITY_VERTEX,
+                    ShaderVisibility: D3D12_SHADER_VISIBILITY_ALL,
                 },
             ];
 
@@ -112,7 +118,7 @@ impl Renderer {
                 GraphicsError::ResourceCreation(format!("Failed to create root signature: {:?}", e))
             ))?;
 
-            // 2. Shaders（从外部文件读取 HLSL）
+            // 2. Shaders（分别读取 vertex.hlsl / fragment.hlsl）
             use std::fs;
             let hlsl_path = "src/renderer/shaders/shader.hlsl";
             let shaders_hlsl = fs::read_to_string(hlsl_path)
@@ -636,7 +642,26 @@ impl Renderer {
             let view = self.scene.camera.view_matrix();
             let projection = self.scene.camera.projection_matrix(aspect_ratio);
 
-            let ubo = UniformBufferObject::from_matrices(&model, &view, &projection);
+            // 计算灯光参数
+            let rot = self.scene.light.transform.rotation;
+            let pitch = rot[0].to_radians();
+            let yaw = rot[1].to_radians();
+            let dir = nalgebra::Vector3::new(
+                yaw.sin() * pitch.cos(),
+                -pitch.sin(),
+                -yaw.cos() * pitch.cos(),
+            ).normalize();
+            let color = self.scene.light.color;
+            let intensity = self.scene.light.intensity;
+
+            let ubo = UniformBufferObject::new(
+                &model,
+                &view,
+                &projection,
+                [dir.x, dir.y, dir.z],
+                [color[0]*intensity, color[1]*intensity, color[2]*intensity, intensity],
+                self.scene.camera.transform.position,
+            );
 
             // 更新常量缓冲区数据
             std::ptr::copy_nonoverlapping(

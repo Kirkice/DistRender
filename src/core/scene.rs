@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::fs;
 use crate::core::error::{Result, DistRenderError, ConfigError};
-use crate::core::math::{Vector3, Matrix4};
+use crate::core::math::{Vector3, Matrix4, Color};
 
 /// 3D 变换数据
 ///
@@ -86,6 +86,38 @@ impl Transform {
     }
 }
 
+/// 平行光配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DirectionalLightConfig {
+    /// 光源变换（主要使用方向）
+    #[serde(default)]
+    pub transform: Transform,
+
+    /// 颜色 (RGB)，范围 0-1
+    #[serde(default = "default_light_color")]
+    pub color: [f32; 3],
+
+    /// 强度
+    #[serde(default = "default_light_intensity")]
+    pub intensity: f32,
+}
+
+fn default_light_color() -> [f32; 3] { [1.0, 1.0, 1.0] }
+fn default_light_intensity() -> f32 { 1.0 }
+
+impl Default for DirectionalLightConfig {
+    fn default() -> Self {
+        Self {
+            transform: Transform {
+                rotation: [-45.0, 45.0, 0.0],
+                ..Transform::default()
+            },
+            color: [1.0, 1.0, 1.0],
+            intensity: 1.0,
+        }
+    }
+}
+
 /// 相机配置
 ///
 /// 定义相机的位置、朝向和投影参数。
@@ -124,8 +156,7 @@ impl Default for CameraConfig {
         Self {
             transform: Transform {
                 position: [0.0, 0.0, 3.0],
-                rotation: [0.0, 0.0, 0.0],
-                scale: [1.0, 1.0, 1.0],
+                ..Transform::default()
             },
             fov: 60.0,
             near_clip: 0.1,
@@ -199,7 +230,7 @@ impl Default for ModelConfig {
 
 /// 场景配置
 ///
-/// 包含场景中的所有元素配置，包括相机和模型。
+/// 包含场景中的所有元素配置，包括相机、模型和灯光。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SceneConfig {
     /// 相机配置
@@ -209,6 +240,10 @@ pub struct SceneConfig {
     /// 模型配置
     #[serde(default)]
     pub model: ModelConfig,
+
+    /// 平行光配置
+    #[serde(default)]
+    pub light: DirectionalLightConfig,
 }
 
 impl Default for SceneConfig {
@@ -216,9 +251,11 @@ impl Default for SceneConfig {
         Self {
             camera: CameraConfig::default(),
             model: ModelConfig::default(),
+            light: DirectionalLightConfig::default(),
         }
     }
 }
+
 
 impl SceneConfig {
     /// 从文件加载场景配置
@@ -248,14 +285,6 @@ impl SceneConfig {
     }
 
     /// 从文件加载，如果文件不存在则返回默认配置
-    ///
-    /// # 参数
-    ///
-    /// - `path`: 配置文件路径
-    ///
-    /// # 返回
-    ///
-    /// 场景配置（从文件加载或默认配置）
     pub fn from_file_or_default<P: AsRef<Path>>(path: P) -> Self {
         let path = path.as_ref();
         if path.exists() {
@@ -276,15 +305,6 @@ impl SceneConfig {
     }
 
     /// 保存配置到文件
-    ///
-    /// # 参数
-    ///
-    /// - `path`: 配置文件路径
-    ///
-    /// # 返回
-    ///
-    /// - `Ok(())`: 保存成功
-    /// - `Err(DistRenderError)`: 保存失败
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path = path.as_ref();
         let contents = toml::to_string_pretty(self)
@@ -326,7 +346,6 @@ mod tests {
         };
         let matrix = transform.to_matrix();
 
-        // 检查平移部分
         assert!((matrix[(0, 3)] - 1.0).abs() < 0.001);
         assert!((matrix[(1, 3)] - 2.0).abs() < 0.001);
         assert!((matrix[(2, 3)] - 3.0).abs() < 0.001);
@@ -345,5 +364,7 @@ mod tests {
         let scene = SceneConfig::default();
         assert_eq!(scene.camera.fov, 60.0);
         assert_eq!(scene.model.path, "assets/models/sphere.obj");
+        assert_eq!(scene.light.intensity, 1.0);
     }
 }
+
