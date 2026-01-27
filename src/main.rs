@@ -114,7 +114,14 @@ fn main() {
     let event_loop = EventLoop::new();
 
     // 7. 创建渲染器（传递配置）
-    let mut renderer = Renderer::new(&event_loop, &config);
+    let mut renderer = match Renderer::new(&event_loop, &config) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to initialize renderer: {}", e);
+            eprintln!("Failed to initialize renderer: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     info!("Renderer initialized successfully");
     info!("Entering main loop...");
@@ -144,7 +151,11 @@ fn main() {
             }
             // 准备绘制下一帧
             Event::RedrawEventsCleared => {
-                renderer.draw();
+                if let Err(e) = renderer.draw() {
+                    error!("Draw failed: {}", e);
+                    eprintln!("Draw failed: {}", e);
+                    *control_flow = ControlFlow::Exit;
+                }
             }
             // 忽略其他事件
             _ => (),

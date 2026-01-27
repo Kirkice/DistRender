@@ -4,29 +4,14 @@ use tracing::{trace, debug, info, warn, error};
 use winit::event_loop::EventLoop;
 use crate::gfx::Dx12Backend;
 use crate::core::Config;
-use crate::core::math::{Vector2, Vector3};
+use crate::core::error::{Result, DistRenderError, GraphicsError};
+use crate::renderer::vertex::{MyVertex, create_default_triangle};
 use windows::Win32::Graphics::Dxgi::{DXGI_PRESENT, DXGI_SWAP_CHAIN_FLAG, Common::*};
 use windows::Win32::Graphics::Direct3D12::*;
 use windows::Win32::Graphics::Direct3D::Fxc::*;
 use windows::Win32::Graphics::Direct3D::*;
 use windows::Win32::Foundation::RECT;
 use windows::Win32::System::Threading::WaitForSingleObject;
-
-#[repr(C)]
-struct Vertex {
-    position: [f32; 2],
-    color: [f32; 3],
-}
-
-impl Vertex {
-    /// 从数学库的 Vector 类型创建顶点
-    fn from_vectors(position: Vector2, color: Vector3) -> Self {
-        Self {
-            position: [position.x, position.y],
-            color: [color.x, color.y, color.z],
-        }
-    }
-}
 
 const FRAME_COUNT: usize = 2;
 
@@ -45,7 +30,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(event_loop: &EventLoop<()>, config: &Config) -> Self {
+    pub fn new(event_loop: &EventLoop<()>, config: &Config) -> Result<Self> {
         let gfx = Dx12Backend::new(event_loop, config);
 
         unsafe {
@@ -208,22 +193,9 @@ impl Renderer {
 
             let pso: ID3D12PipelineState = gfx.device.CreateGraphicsPipelineState(&pso_desc).expect("Failed to create PSO");
 
-            // 5. Vertex Buffer - 使用数学库类型创建顶点数据
-            let vertices = [
-                Vertex::from_vectors(
-                    Vector2::new(0.0, 0.5),
-                    Vector3::new(1.0, 0.0, 0.0)  // 红色
-                ),
-                Vertex::from_vectors(
-                    Vector2::new(0.5, -0.5),
-                    Vector3::new(0.0, 1.0, 0.0)  // 绿色
-                ),
-                Vertex::from_vectors(
-                    Vector2::new(-0.5, -0.5),
-                    Vector3::new(0.0, 0.0, 1.0)  // 蓝色
-                ),
-            ];
-            let vertex_data_size = (std::mem::size_of::<Vertex>() * vertices.len()) as u64;
+            // 5. MyVertex Buffer - 使用公共函数创建默认三角形顶点数据
+            let vertices = create_default_triangle();
+            let vertex_data_size = (std::mem::size_of::<MyVertex>() * vertices.len()) as u64;
 
             let heap_props = D3D12_HEAP_PROPERTIES {
                 Type: D3D12_HEAP_TYPE_UPLOAD,
@@ -254,13 +226,13 @@ impl Renderer {
             // Copy data
             let mut data = std::ptr::null_mut();
             vertex_buffer.Map(0, None, Some(&mut data)).unwrap();
-            std::ptr::copy_nonoverlapping(vertices.as_ptr(), data as *mut Vertex, vertices.len());
+            std::ptr::copy_nonoverlapping(vertices.as_ptr(), data as *mut MyVertex, vertices.len());
             vertex_buffer.Unmap(0, None);
 
             let vertex_buffer_view = D3D12_VERTEX_BUFFER_VIEW {
                 BufferLocation: vertex_buffer.GetGPUVirtualAddress(),
                 SizeInBytes: vertex_data_size as u32,
-                StrideInBytes: std::mem::size_of::<Vertex>() as u32,
+                StrideInBytes: std::mem::size_of::<MyVertex>() as u32,
             };
 
             // 6. Viewport/Scissor
@@ -305,7 +277,7 @@ impl Renderer {
             #[cfg(debug_assertions)]
             info!("DX12 Renderer initialized successfully");
 
-            Self {
+            Ok(Self {
                 gfx,
                 root_signature,
                 pso,
@@ -316,7 +288,7 @@ impl Renderer {
                 command_allocators,
                 command_list,
                 fence_values: [0; FRAME_COUNT],
-            }
+            })
         }
     }
 
@@ -382,7 +354,7 @@ impl Renderer {
         }
     }
 
-    pub fn draw(&mut self) {
+    pub fn draw(&mut self) -> Result<()> {
         unsafe {
             let frame_index = self.gfx.frame_index;
 
@@ -489,6 +461,8 @@ impl Renderer {
 
             #[cfg(debug_assertions)]
             trace!(frame_index, next_frame = self.gfx.frame_index, "Frame completed");
+
+            Ok(())
         }
     }
 }

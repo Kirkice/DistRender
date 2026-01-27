@@ -29,6 +29,7 @@ use winit::event_loop::EventLoop;
 use crate::renderer::vulkan::Renderer as VulkanRenderer;
 use crate::renderer::dx12::Renderer as Dx12Renderer;
 use crate::core::Config;
+use crate::core::error::Result;
 
 // 子模块声明
 pub mod vertex;
@@ -96,18 +97,18 @@ impl Renderer {
     ///
     /// let renderer = Renderer::new(&event_loop, &config);
     /// ```
-    pub fn new(event_loop: &EventLoop<()>, config: &Config) -> Self {
+    pub fn new(event_loop: &EventLoop<()>, config: &Config) -> Result<Self> {
         let backend = if config.graphics.backend.is_dx12() {
             info!("Initializing DX12 Backend");
-            let renderer = Dx12Renderer::new(event_loop, config);
+            let renderer = Dx12Renderer::new(event_loop, config)?;
             Backend::Dx12(renderer)
         } else {
             info!("Initializing Vulkan Backend");
-            let renderer = VulkanRenderer::new(event_loop, config);
+            let renderer = VulkanRenderer::new(event_loop, config)?;
             Backend::Vulkan(renderer)
         };
 
-        Self { backend }
+        Ok(Self { backend })
     }
 
     /// 处理窗口大小调整
@@ -150,7 +151,7 @@ impl Renderer {
     ///     renderer.draw();
     /// }
     /// ```
-    pub fn draw(&mut self) {
+    pub fn draw(&mut self) -> Result<()> {
         match &mut self.backend {
             Backend::Vulkan(r) => r.draw(),
             Backend::Dx12(r) => r.draw(),

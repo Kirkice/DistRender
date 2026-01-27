@@ -90,6 +90,42 @@ impl MyVertex {
     }
 }
 
+/// 创建默认的彩色三角形顶点数据
+///
+/// 这是一个便利函数，用于创建一个标准的演示三角形。
+/// 三角形由三个顶点组成，分别为红色、绿色和蓝色。
+///
+/// # 返回值
+///
+/// 返回包含三个顶点的数组：
+/// - 顶点 1：顶部中心 (0.0, 0.5)，红色
+/// - 顶点 2：右下角 (0.5, -0.5)，绿色
+/// - 顶点 3：左下角 (-0.5, -0.5)，蓝色
+///
+/// # 示例
+///
+/// ```
+/// # use crate::renderer::vertex::create_default_triangle;
+/// let vertices = create_default_triangle();
+/// assert_eq!(vertices.len(), 3);
+/// ```
+pub fn create_default_triangle() -> [MyVertex; 3] {
+    [
+        MyVertex::from_vectors(
+            Vector2::new(0.0, 0.5),
+            Vector3::new(1.0, 0.0, 0.0)  // 红色
+        ),
+        MyVertex::from_vectors(
+            Vector2::new(0.5, -0.5),
+            Vector3::new(0.0, 1.0, 0.0)  // 绿色
+        ),
+        MyVertex::from_vectors(
+            Vector2::new(-0.5, -0.5),
+            Vector3::new(0.0, 0.0, 1.0)  // 蓝色
+        ),
+    ]
+}
+
 // 实现 Vulkano 的顶点特征
 // 这个宏会自动生成必要的代码，告诉 Vulkan 如何解释顶点数据
 vulkano::impl_vertex!(MyVertex, position, color);

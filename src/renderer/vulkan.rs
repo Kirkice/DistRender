@@ -19,11 +19,11 @@ use vulkano::sync::{self, FlushError, GpuFuture};
 use winit::event_loop::EventLoop;
 use winit::window::Window;
 
-use crate::renderer::vertex::MyVertex;
+use crate::renderer::vertex::{MyVertex, create_default_triangle};
 use crate::renderer::shaders::{vs, fs};
 use crate::gfx::{GraphicsBackend, VulkanBackend as GfxDevice};
 use crate::core::Config;
-use crate::core::math::{Vector2, Vector3};
+use crate::core::error::{Result, DistRenderError, GraphicsError};
 
 pub struct Renderer {
     gfx: GfxDevice,
@@ -38,22 +38,39 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(event_loop: &EventLoop<()>, config: &Config) -> Self {
+    pub fn new(event_loop: &EventLoop<()>, config: &Config) -> Result<Self> {
         let gfx = GfxDevice::new(event_loop, config);
 
         let (swapchain, images) = {
             let surface_capabilities = gfx.device
                 .physical_device()
                 .surface_capabilities(&gfx.surface, Default::default())
-                .expect("failed to get surface capabilities");
+                .map_err(|e| DistRenderError::Graphics(
+                    GraphicsError::DeviceCreation(format!("Failed to get surface capabilities: {:?}", e))
+                ))?;
 
-            let image_format = gfx.device
+            let surface_formats = gfx.device
                 .physical_device()
                 .surface_formats(&gfx.surface, Default::default())
-                .expect("failed to get surface formats")[0]
+                .map_err(|e| DistRenderError::Graphics(
+                    GraphicsError::DeviceCreation(format!("Failed to get surface formats: {:?}", e))
+                ))?;
+
+            let image_format = surface_formats.get(0)
+                .ok_or_else(|| DistRenderError::Graphics(
+                    GraphicsError::DeviceCreation("No surface formats available".to_string())
+                ))?
                 .0;
 
             let window = gfx.window();
+
+            let composite_alpha = surface_capabilities
+                .supported_composite_alpha
+                .iter()
+                .next()
+                .ok_or_else(|| DistRenderError::Graphics(
+                    GraphicsError::SwapchainError("No supported composite alpha modes".to_string())
+                ))?;
 
             Swapchain::new(
                 gfx.device.clone(),
@@ -66,15 +83,13 @@ impl Renderer {
                         color_attachment: true,
                         ..ImageUsage::empty()
                     },
-                    composite_alpha: surface_capabilities
-                        .supported_composite_alpha
-                        .iter()
-                        .next()
-                        .unwrap(),
+                    composite_alpha,
                     ..Default::default()
                 },
             )
-            .expect("Failed to create swapchain")
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::SwapchainError(format!("Failed to create swapchain: {:?}", e))
+            ))?
         };
 
         #[cfg(debug_assertions)]
@@ -85,19 +100,8 @@ impl Renderer {
             "Swapchain created"
         );
 
-        // 使用数学库类型创建顶点数据
-        let vertex1 = MyVertex::from_vectors(
-            Vector2::new(0.0, 0.5),
-            Vector3::new(1.0, 0.0, 0.0)  // 红色
-        );
-        let vertex2 = MyVertex::from_vectors(
-            Vector2::new(0.5, -0.5),
-            Vector3::new(0.0, 1.0, 0.0)  // 绿色
-        );
-        let vertex3 = MyVertex::from_vectors(
-            Vector2::new(-0.5, -0.5),
-            Vector3::new(0.0, 0.0, 1.0)  // 蓝色
-        );
+        // 使用公共函数创建默认三角形顶点数据
+        let vertices = create_default_triangle();
 
         let vertex_buffer = CpuAccessibleBuffer::from_iter(
             &gfx.memory_allocator,
@@ -106,12 +110,20 @@ impl Renderer {
                 ..BufferUsage::empty()
             },
             false,
-            vec![vertex1, vertex2, vertex3],
+            vertices,
         )
-        .unwrap();
+        .map_err(|e| DistRenderError::Graphics(
+            GraphicsError::ResourceCreation(format!("Failed to create vertex buffer: {:?}", e))
+        ))?;
 
-        let vs = vs::load(gfx.device.clone()).expect("Failed to load vertex shader");
-        let fs = fs::load(gfx.device.clone()).expect("Failed to load fragment shader");
+        let vs = vs::load(gfx.device.clone())
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::ShaderCompilation(format!("Failed to load vertex shader: {:?}", e))
+            ))?;
+        let fs = fs::load(gfx.device.clone())
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::ShaderCompilation(format!("Failed to load fragment shader: {:?}", e))
+            ))?;
 
         #[cfg(debug_assertions)]
         debug!("Shaders loaded successfully");
@@ -131,23 +143,40 @@ impl Renderer {
                 depth_stencil: {}
             }
         )
-        .expect("Failed to create render pass");
+        .map_err(|e| DistRenderError::Graphics(
+            GraphicsError::ResourceCreation(format!("Failed to create render pass: {:?}", e))
+        ))?;
 
         #[cfg(debug_assertions)]
         debug!("Render pass created");
 
         let pipeline = {
-            let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
+            let subpass = Subpass::from(render_pass.clone(), 0)
+                .ok_or_else(|| DistRenderError::Graphics(
+                    GraphicsError::ResourceCreation("Failed to create subpass".to_string())
+                ))?;
+
+            let vs_entry = vs.entry_point("main")
+                .ok_or_else(|| DistRenderError::Graphics(
+                    GraphicsError::ShaderCompilation("Vertex shader 'main' entry point not found".to_string())
+                ))?;
+
+            let fs_entry = fs.entry_point("main")
+                .ok_or_else(|| DistRenderError::Graphics(
+                    GraphicsError::ShaderCompilation("Fragment shader 'main' entry point not found".to_string())
+                ))?;
 
             GraphicsPipeline::start()
                 .vertex_input_state(BuffersDefinition::new().vertex::<MyVertex>())
-                .vertex_shader(vs.entry_point("main").unwrap(), ())
+                .vertex_shader(vs_entry, ())
                 .input_assembly_state(InputAssemblyState::new())
                 .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
-                .fragment_shader(fs.entry_point("main").unwrap(), ())
+                .fragment_shader(fs_entry, ())
                 .render_pass(subpass)
                 .build(gfx.device.clone())
-                .expect("Failed to create graphics pipeline")
+                .map_err(|e| DistRenderError::Graphics(
+                    GraphicsError::ResourceCreation(format!("Failed to create graphics pipeline: {:?}", e))
+                ))?
         };
 
         #[cfg(debug_assertions)]
@@ -159,14 +188,14 @@ impl Renderer {
             depth_range: 0.0..1.0,
         };
 
-        let framebuffers = window_size_dependent_setup(&images, render_pass.clone(), &mut viewport);
+        let framebuffers = window_size_dependent_setup(&images, render_pass.clone(), &mut viewport)?;
 
         let previous_frame_end = Some(sync::now(gfx.device.clone()).boxed());
 
         #[cfg(debug_assertions)]
         info!("Vulkan Renderer initialized successfully");
 
-        Self {
+        Ok(Self {
             gfx,
             swapchain,
             render_pass,
@@ -176,7 +205,7 @@ impl Renderer {
             viewport,
             recreate_swapchain: false,
             previous_frame_end,
-        }
+        })
     }
 
     pub fn window(&self) -> &Window {
@@ -190,14 +219,16 @@ impl Renderer {
         self.recreate_swapchain = true;
     }
 
-    pub fn draw(&mut self) {
+    pub fn draw(&mut self) -> Result<()> {
         let window = self.window();
         let dimensions = window.inner_size();
         if dimensions.width == 0 || dimensions.height == 0 {
-            return;
+            return Ok(());
         }
 
-        self.previous_frame_end.as_mut().unwrap().cleanup_finished();
+        self.previous_frame_end.as_mut()
+            .ok_or_else(|| DistRenderError::Runtime("Previous frame end not initialized".to_string()))?
+            .cleanup_finished();
 
         if self.recreate_swapchain {
             #[cfg(debug_assertions)]
@@ -211,11 +242,13 @@ impl Renderer {
                 Err(SwapchainCreationError::ImageExtentNotSupported { .. }) => {
                     #[cfg(debug_assertions)]
                     warn!("Swapchain recreation skipped: extent not supported");
-                    return;
+                    return Ok(());
                 }
                 Err(e) => {
                     error!("Failed to recreate swapchain: {:?}", e);
-                    panic!("failed to recreate swapchain: {:?}", e);
+                    return Err(DistRenderError::Graphics(
+                        GraphicsError::SwapchainError(format!("Failed to recreate swapchain: {:?}", e))
+                    ));
                 }
             };
 
@@ -232,7 +265,7 @@ impl Renderer {
                 &new_images,
                 self.render_pass.clone(),
                 &mut self.viewport,
-            );
+            )?;
             self.recreate_swapchain = false;
 
             #[cfg(debug_assertions)]
@@ -250,11 +283,13 @@ impl Renderer {
                     #[cfg(debug_assertions)]
                     warn!("Swapchain out of date, will recreate");
                     self.recreate_swapchain = true;
-                    return;
+                    return Ok(());
                 }
                 Err(e) => {
                     error!("Failed to acquire next image: {:?}", e);
-                    panic!("failed to acquire next image: {:?}", e);
+                    return Err(DistRenderError::Graphics(
+                        GraphicsError::CommandExecution(format!("Failed to acquire next image: {:?}", e))
+                    ));
                 }
             };
 
@@ -272,7 +307,9 @@ impl Renderer {
             self.gfx.queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         )
-        .expect("Failed to create command buffer builder");
+        .map_err(|e| DistRenderError::Graphics(
+            GraphicsError::CommandExecution(format!("Failed to create command buffer builder: {:?}", e))
+        ))?;
 
         builder
             .begin_render_pass(
@@ -284,27 +321,38 @@ impl Renderer {
                 },
                 SubpassContents::Inline,
             )
-            .expect("Failed to begin render pass")
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::CommandExecution(format!("Failed to begin render pass: {:?}", e))
+            ))?
             .set_viewport(0, [self.viewport.clone()].into_iter())
             .bind_pipeline_graphics(self.pipeline.clone())
             .bind_vertex_buffers(0, self.vertex_buffer.clone())
             .draw(self.vertex_buffer.len() as u32, 1, 0, 0)
-            .expect("Failed to record draw command")
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::CommandExecution(format!("Failed to record draw command: {:?}", e))
+            ))?
             .end_render_pass()
-            .expect("Failed to end render pass");
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::CommandExecution(format!("Failed to end render pass: {:?}", e))
+            ))?;
 
         let command_buffer = builder.build()
-            .expect("Failed to build command buffer");
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::CommandExecution(format!("Failed to build command buffer: {:?}", e))
+            ))?;
 
         #[cfg(debug_assertions)]
         trace!("Command buffer built, submitting to queue");
 
-        let future = self.previous_frame_end
-            .take()
-            .unwrap()
+        let previous_frame = self.previous_frame_end.take()
+            .ok_or_else(|| DistRenderError::Runtime("Previous frame end not initialized".to_string()))?;
+
+        let future = previous_frame
             .join(acquire_future)
             .then_execute(self.gfx.queue.clone(), command_buffer)
-            .expect("Failed to execute command buffer")
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::CommandExecution(format!("Failed to execute command buffer: {:?}", e))
+            ))?
             .then_swapchain_present(
                 self.gfx.queue.clone(),
                 SwapchainPresentInfo::swapchain_image_index(self.swapchain.clone(), image_index),
@@ -328,6 +376,8 @@ impl Renderer {
                 self.previous_frame_end = Some(sync::now(self.gfx.device.clone()).boxed());
             }
         }
+
+        Ok(())
     }
 }
 
@@ -335,14 +385,17 @@ fn window_size_dependent_setup(
     images: &[Arc<SwapchainImage>],
     render_pass: Arc<RenderPass>,
     viewport: &mut Viewport,
-) -> Vec<Arc<Framebuffer>> {
+) -> Result<Vec<Arc<Framebuffer>>> {
     let dimensions = images[0].dimensions().width_height();
     viewport.dimensions = [dimensions[0] as f32, dimensions[1] as f32];
 
     images
         .iter()
         .map(|image| {
-            let view = ImageView::new_default(image.clone()).unwrap();
+            let view = ImageView::new_default(image.clone())
+                .map_err(|e| DistRenderError::Graphics(
+                    GraphicsError::ResourceCreation(format!("Failed to create image view: {:?}", e))
+                ))?;
             Framebuffer::new(
                 render_pass.clone(),
                 FramebufferCreateInfo {
@@ -350,7 +403,9 @@ fn window_size_dependent_setup(
                     ..Default::default()
                 },
             )
-            .unwrap()
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::ResourceCreation(format!("Failed to create framebuffer: {:?}", e))
+            ))
         })
-        .collect::<Vec<_>>()
+        .collect::<Result<Vec<_>>>()
 }
