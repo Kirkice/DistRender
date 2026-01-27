@@ -34,6 +34,9 @@ use crate::core::error::Result;
 // 子模块声明
 pub mod vertex;
 pub mod shaders;
+pub mod resource;
+pub mod sync;
+pub mod command;
 pub mod vulkan;
 pub mod dx12;
 

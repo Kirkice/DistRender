@@ -21,6 +21,8 @@ use winit::window::Window;
 
 use crate::renderer::vertex::{MyVertex, create_default_triangle};
 use crate::renderer::shaders::{vs, fs};
+use crate::renderer::resource::FrameResourcePool;
+use crate::renderer::sync::{FenceManager, FenceValue};
 use crate::gfx::{GraphicsBackend, VulkanBackend as GfxDevice};
 use crate::core::Config;
 use crate::core::error::{Result, DistRenderError, GraphicsError};
@@ -35,6 +37,11 @@ pub struct Renderer {
     viewport: Viewport,
     recreate_swapchain: bool,
     previous_frame_end: Option<Box<dyn GpuFuture>>,
+
+    // 新增：帧资源管理
+    frame_resource_pool: FrameResourcePool,
+    // 新增：Fence同步管理
+    fence_manager: FenceManager,
 }
 
 impl Renderer {
@@ -192,8 +199,14 @@ impl Renderer {
 
         let previous_frame_end = Some(sync::now(gfx.device.clone()).boxed());
 
+        // 初始化帧资源池（三缓冲）
+        let frame_resource_pool = FrameResourcePool::triple_buffering();
+
+        // 初始化Fence管理器
+        let fence_manager = FenceManager::new();
+
         #[cfg(debug_assertions)]
-        info!("Vulkan Renderer initialized successfully");
+        info!("Vulkan Renderer initialized successfully with triple buffering");
 
         Ok(Self {
             gfx,
@@ -205,6 +218,8 @@ impl Renderer {
             viewport,
             recreate_swapchain: false,
             previous_frame_end,
+            frame_resource_pool,
+            fence_manager,
         })
     }
 
@@ -219,7 +234,39 @@ impl Renderer {
         self.recreate_swapchain = true;
     }
 
+    /// 等待GPU完成所有工作（类似DistEngine的FlushCommandQueue）
+    ///
+    /// 这是一个阻塞操作，会等待所有提交的GPU命令完成。
+    /// 通常用于清理资源或同步点。
+    pub fn flush(&mut self) -> Result<()> {
+        #[cfg(debug_assertions)]
+        debug!("Flushing command queue...");
+
+        // 等待previous_frame_end完成
+        if let Some(ref mut future) = self.previous_frame_end {
+            future.cleanup_finished();
+        }
+
+        // 等待所有帧资源完成
+        let current_fence = self.fence_manager.current_value();
+        self.fence_manager.wait_for_value(current_fence)?;
+
+        // 更新所有帧资源为可用
+        self.frame_resource_pool.update_availability(current_fence.value());
+
+        #[cfg(debug_assertions)]
+        debug!("Command queue flushed");
+
+        Ok(())
+    }
+
     pub fn draw(&mut self) -> Result<()> {
+        // 获取当前帧资源信息
+        let current_frame = self.frame_resource_pool.current_index();
+
+        #[cfg(debug_assertions)]
+        trace!("Drawing frame {}", current_frame);
+
         let window = self.window();
         let dimensions = window.inner_size();
         if dimensions.width == 0 || dimensions.height == 0 {
@@ -376,6 +423,18 @@ impl Renderer {
                 self.previous_frame_end = Some(sync::now(self.gfx.device.clone()).boxed());
             }
         }
+
+        // 更新 Fence 管理器
+        let fence_value = self.fence_manager.next_value();
+
+        #[cfg(debug_assertions)]
+        trace!("Frame {} submitted with fence value {}", current_frame, fence_value.value());
+
+        // 标记当前帧资源为使用中
+        self.frame_resource_pool.current_mut().mark_in_use(fence_value.value());
+
+        // 推进到下一帧
+        self.frame_resource_pool.advance();
 
         Ok(())
     }

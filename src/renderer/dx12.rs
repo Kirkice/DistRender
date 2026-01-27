@@ -6,6 +6,8 @@ use crate::gfx::Dx12Backend;
 use crate::core::Config;
 use crate::core::error::{Result, DistRenderError, GraphicsError};
 use crate::renderer::vertex::{MyVertex, create_default_triangle};
+use crate::renderer::resource::FrameResourcePool;
+use crate::renderer::sync::{FenceManager, FenceValue};
 use windows::Win32::Graphics::Dxgi::{DXGI_PRESENT, DXGI_SWAP_CHAIN_FLAG, Common::*};
 use windows::Win32::Graphics::Direct3D12::*;
 use windows::Win32::Graphics::Direct3D::Fxc::*;
@@ -26,7 +28,11 @@ pub struct Renderer {
     scissor_rect: RECT,
     command_allocators: [ID3D12CommandAllocator; FRAME_COUNT],
     command_list: ID3D12GraphicsCommandList,
-    fence_values: [u64; FRAME_COUNT],
+
+    // 使用新的帧资源管理系统（替代fence_values）
+    frame_resource_pool: FrameResourcePool,
+    // 使用新的Fence管理器
+    fence_manager: FenceManager,
 }
 
 impl Renderer {
@@ -274,8 +280,14 @@ impl Renderer {
             // 初始创建时命令列表是打开状态，需要先关闭
             command_list.Close().expect("Failed to close initial CommandList");
 
+            // 初始化帧资源池（双缓冲，与FRAME_COUNT匹配）
+            let frame_resource_pool = FrameResourcePool::double_buffering();
+
+            // 初始化Fence管理器
+            let fence_manager = FenceManager::new();
+
             #[cfg(debug_assertions)]
-            info!("DX12 Renderer initialized successfully");
+            info!("DX12 Renderer initialized successfully with double buffering");
 
             Ok(Self {
                 gfx,
@@ -287,8 +299,43 @@ impl Renderer {
                 scissor_rect,
                 command_allocators,
                 command_list,
-                fence_values: [0; FRAME_COUNT],
+                frame_resource_pool,
+                fence_manager,
             })
+        }
+    }
+
+    /// 等待GPU完成所有工作（类似DistEngine的FlushCommandQueue）
+    ///
+    /// 这是一个阻塞操作，会等待所有提交的GPU命令完成。
+    /// 通常用于清理资源或同步点。
+    pub fn flush(&mut self) -> Result<()> {
+        unsafe {
+            #[cfg(debug_assertions)]
+            debug!("Flushing DX12 command queue...");
+
+            // Signal一个新的fence值
+            let flush_fence = self.fence_manager.next_value();
+            self.gfx.command_queue.Signal(&self.gfx.fence, flush_fence.value())
+                .expect("Failed to signal fence");
+
+            // 等待该fence值完成
+            if self.gfx.fence.GetCompletedValue() < flush_fence.value() {
+                self.gfx.fence.SetEventOnCompletion(flush_fence.value(), self.gfx.fence_event)
+                    .expect("Failed to set fence event");
+                WaitForSingleObject(self.gfx.fence_event, windows::Win32::System::Threading::INFINITE);
+            }
+
+            // 更新fence管理器
+            self.fence_manager.update_completed_value(flush_fence);
+
+            // 更新所有帧资源为可用
+            self.frame_resource_pool.update_availability(flush_fence.value());
+
+            #[cfg(debug_assertions)]
+            debug!("DX12 command queue flushed");
+
+            Ok(())
         }
     }
 
@@ -347,7 +394,9 @@ impl Renderer {
             self.gfx.frame_index = self.gfx.swap_chain.GetCurrentBackBufferIndex() as usize;
 
             // 清除 fence 值（因为我们等待了所有帧完成）
-            self.fence_values = [0; FRAME_COUNT];
+            // 重置帧资源池
+            self.frame_resource_pool = FrameResourcePool::double_buffering();
+            self.fence_manager.reset();
 
             #[cfg(debug_assertions)]
             debug!(width = size.width, height = size.height, "Resize completed");
@@ -364,18 +413,28 @@ impl Renderer {
                 trace!(frame_index, fence_value = self.gfx.fence_value, completed = completed_value, "Frame state");
             }
 
-            // 只等待当前帧的前一次使用完成（双缓冲优化）
-            let fence_value = self.fence_values[frame_index];
-            if fence_value > 0 && self.gfx.fence.GetCompletedValue() < fence_value {
-                #[cfg(debug_assertions)]
-                debug!(frame_index, fence_value, "Waiting for GPU");
-
-                self.gfx.fence.SetEventOnCompletion(fence_value, self.gfx.fence_event)
-                    .expect("Failed to set fence event");
-                WaitForSingleObject(self.gfx.fence_event, windows::Win32::System::Threading::INFINITE);
+            // 使用新的帧资源管理：检查当前帧资源是否可用
+            let current_frame_resource = self.frame_resource_pool.get(frame_index)
+                .ok_or_else(|| DistRenderError::Runtime("Invalid frame index".to_string()))?;
+            if !current_frame_resource.available {
+                let fence_value = current_frame_resource.fence_value;
 
                 #[cfg(debug_assertions)]
-                debug!(frame_index, "GPU wait completed");
+                debug!(frame_index, fence_value, "Waiting for GPU (frame resource in use)");
+
+                // 等待该帧资源完成
+                if self.gfx.fence.GetCompletedValue() < fence_value {
+                    self.gfx.fence.SetEventOnCompletion(fence_value, self.gfx.fence_event)
+                        .expect("Failed to set fence event");
+                    WaitForSingleObject(self.gfx.fence_event, windows::Win32::System::Threading::INFINITE);
+
+                    #[cfg(debug_assertions)]
+                    debug!(frame_index, "GPU wait completed");
+                }
+
+                // 更新已完成的fence值
+                self.fence_manager.update_completed_value(FenceValue::new(self.gfx.fence.GetCompletedValue()));
+                self.frame_resource_pool.update_availability(self.gfx.fence.GetCompletedValue());
             }
 
             // 重置当前帧的命令分配器和命令列表
@@ -384,13 +443,17 @@ impl Renderer {
             self.command_list.Reset(allocator, Some(&self.pso))
                 .expect("Failed to reset CommandList");
 
+            // Get render target resource
+            let render_target: ID3D12Resource = self.gfx.swap_chain.GetBuffer(self.gfx.frame_index as u32)
+                .map_err(|e| DistRenderError::Graphics(GraphicsError::ResourceCreation(format!("Failed to get swap chain buffer: {:?}", e))))?;
+
             // Transition Barrier Present -> RenderTarget
             let barrier = D3D12_RESOURCE_BARRIER {
                 Type: D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
                 Flags: D3D12_RESOURCE_BARRIER_FLAG_NONE,
                 Anonymous: D3D12_RESOURCE_BARRIER_0 {
                     Transition: ManuallyDrop::new(D3D12_RESOURCE_TRANSITION_BARRIER {
-                        pResource: ManuallyDrop::new(Some(self.gfx.swap_chain.GetBuffer(self.gfx.frame_index as u32).unwrap())),
+                        pResource: ManuallyDrop::new(Some(render_target.clone())),
                         Subresource: D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
                         StateBefore: D3D12_RESOURCE_STATE_PRESENT,
                         StateAfter: D3D12_RESOURCE_STATE_RENDER_TARGET,
@@ -423,7 +486,7 @@ impl Renderer {
                 Flags: D3D12_RESOURCE_BARRIER_FLAG_NONE,
                 Anonymous: D3D12_RESOURCE_BARRIER_0 {
                     Transition: ManuallyDrop::new(D3D12_RESOURCE_TRANSITION_BARRIER {
-                        pResource: ManuallyDrop::new(Some(self.gfx.swap_chain.GetBuffer(self.gfx.frame_index as u32).unwrap())),
+                        pResource: ManuallyDrop::new(Some(render_target.clone())),
                         Subresource: D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
                         StateBefore: D3D12_RESOURCE_STATE_RENDER_TARGET,
                         StateAfter: D3D12_RESOURCE_STATE_PRESENT,
@@ -431,6 +494,9 @@ impl Renderer {
                 },
             };
             self.command_list.ResourceBarrier(&[barrier_back]);
+
+            // Explicitly drop the render target to release reference before potential resize
+            drop(render_target);
 
             self.command_list.Close()
                 .expect("Failed to close command list");
@@ -449,12 +515,21 @@ impl Renderer {
             #[cfg(debug_assertions)]
             trace!(frame_index, "Presented");
 
-            // Signal fence and store the value for this frame
-            let next_fence_value = self.gfx.fence_value;
-            self.gfx.command_queue.Signal(&self.gfx.fence, next_fence_value)
+            // 使用新的 Fence 管理器提交信号
+            let fence_value = self.fence_manager.next_value();
+            self.gfx.command_queue.Signal(&self.gfx.fence, fence_value.value())
                 .expect("Failed to signal fence");
-            self.fence_values[frame_index] = next_fence_value;
-            self.gfx.fence_value += 1;
+
+            #[cfg(debug_assertions)]
+            trace!(frame_index, fence_value = fence_value.value(), "Fence signaled");
+
+            // 标记当前帧资源为使用中
+            if let Some(frame_resource) = self.frame_resource_pool.get_mut(frame_index) {
+                frame_resource.mark_in_use(fence_value.value());
+            }
+
+            // 保持与 gfx.fence_value 的同步（为了兼容性）
+            self.gfx.fence_value = fence_value.value() + 1;
 
             // Update frame index
             self.gfx.frame_index = self.gfx.swap_chain.GetCurrentBackBufferIndex() as usize;
