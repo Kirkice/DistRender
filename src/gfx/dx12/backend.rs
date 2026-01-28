@@ -29,7 +29,7 @@ use winit::window::{Window, WindowBuilder};
 use winit::event_loop::EventLoop;
 use winit::dpi::LogicalSize;
 
-use super::GraphicsBackend;
+use crate::gfx::backend::GraphicsBackend;
 use crate::core::Config;
 
 /// DirectX 12 图形后端

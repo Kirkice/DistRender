@@ -22,10 +22,10 @@ use winit::window::Window;
 use bytemuck::{Pod, Zeroable};
 
 use crate::renderer::vertex::{MyVertex, create_default_triangle, convert_geometry_vertex};
-use crate::renderer::shaders::{vs, fs};
+use crate::gfx::vulkan::shaders::{vs, fs};
 use crate::renderer::resource::FrameResourcePool;
 use crate::renderer::sync::FenceManager;
-use crate::renderer::descriptor_vulkan::VulkanDescriptorManager;
+use crate::gfx::vulkan::descriptor::VulkanDescriptorManager;
 use crate::gfx::{GraphicsBackend, VulkanBackend as GfxDevice};
 use crate::core::{Config, SceneConfig, Matrix4};
 use crate::core::error::{Result, DistRenderError, GraphicsError};

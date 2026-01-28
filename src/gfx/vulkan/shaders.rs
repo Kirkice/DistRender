@@ -14,7 +14,8 @@ pub mod vs {
     /// 从 vertex.hlsl 编译的 SPIR-V 字节码
     pub fn load(device: Arc<Device>) -> Result<Arc<ShaderModule>, Box<dyn std::error::Error>> {
         // 在编译时嵌入 SPIR-V 文件
-        let spirv = include_bytes!("shaders/spirv_code/vertex.hlsl.spv");
+        // 相对于 src/gfx/vulkan/ 的路径
+        let spirv = include_bytes!("../../renderer/shaders/spirv_code/vertex.hlsl.spv");
 
         unsafe {
             ShaderModule::from_bytes(device, spirv)
@@ -30,7 +31,8 @@ pub mod fs {
     /// 从 fragment.hlsl 编译的 SPIR-V 字节码
     pub fn load(device: Arc<Device>) -> Result<Arc<ShaderModule>, Box<dyn std::error::Error>> {
         // 在编译时嵌入 SPIR-V 文件
-        let spirv = include_bytes!("shaders/spirv_code/fragment.hlsl.spv");
+        // 相对于 src/gfx/vulkan/ 的路径
+        let spirv = include_bytes!("../../renderer/shaders/spirv_code/fragment.hlsl.spv");
 
         unsafe {
             ShaderModule::from_bytes(device, spirv)

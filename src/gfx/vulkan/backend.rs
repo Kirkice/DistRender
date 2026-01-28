@@ -32,7 +32,7 @@ use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 use winit::dpi::LogicalSize;
 
-use super::GraphicsBackend;
+use crate::gfx::backend::GraphicsBackend;
 use crate::core::Config;
 
 /// Vulkan 图形后端

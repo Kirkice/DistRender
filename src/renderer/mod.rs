@@ -8,7 +8,7 @@
 //!
 //! - `Renderer`：统一的渲染器接口，对外提供一致的 API
 //! - `Backend`：内部枚举，封装不同的图形后端实现
-//! - 子模块：`vulkan`、`dx12` 分别实现具体的渲染逻辑
+//! - 底层实现在 `gfx` 模块中，按 API 分类组织
 //!
 //! # 使用示例
 //!
@@ -26,22 +26,17 @@
 
 use tracing::info;
 use winit::event_loop::EventLoop;
-use crate::renderer::vulkan::Renderer as VulkanRenderer;
-use crate::renderer::dx12::Renderer as Dx12Renderer;
+use crate::gfx::vulkan::Renderer as VulkanRenderer;
+use crate::gfx::dx12::Renderer as Dx12Renderer;
 use crate::core::Config;
 use crate::core::error::Result;
 
-// 子模块声明
+// 通用渲染器组件（与具体 API 无关）
 pub mod vertex;
-pub mod shaders;
 pub mod resource;
 pub mod sync;
 pub mod command;
 pub mod descriptor;
-pub mod descriptor_dx12;
-pub mod descriptor_vulkan;
-pub mod vulkan;
-pub mod dx12;
 
 /// 图形后端枚举
 ///

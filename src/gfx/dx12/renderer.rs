@@ -7,7 +7,7 @@ use crate::core::error::{Result, DistRenderError, GraphicsError};
 use crate::renderer::vertex::{MyVertex, create_default_triangle, convert_geometry_vertex};
 use crate::renderer::resource::FrameResourcePool;
 use crate::renderer::sync::{FenceManager, FenceValue};
-use crate::renderer::descriptor_dx12::Dx12DescriptorManager;
+use crate::gfx::dx12::descriptor::Dx12DescriptorManager;
 use crate::geometry::loaders::{MeshLoader, ObjLoader};
 use std::path::Path;
 use windows::Win32::Graphics::Dxgi::{DXGI_PRESENT, DXGI_SWAP_CHAIN_FLAG, Common::*};
