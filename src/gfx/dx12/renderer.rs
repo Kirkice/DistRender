@@ -9,7 +9,10 @@ use crate::renderer::resource::FrameResourcePool;
 use crate::renderer::sync::{FenceManager, FenceValue};
 use crate::gfx::dx12::descriptor::Dx12DescriptorManager;
 use crate::geometry::loaders::{MeshLoader, ObjLoader};
+use crate::component::Camera;
+use crate::core::math::Vector3;
 use std::path::Path;
+use std::f32::consts::PI;
 use windows::Win32::Graphics::Dxgi::{DXGI_PRESENT, DXGI_SWAP_CHAIN_FLAG, Common::*};
 use windows::Win32::Graphics::Direct3D12::*;
 use windows::Win32::Graphics::Direct3D::Fxc::*;
@@ -78,6 +81,8 @@ pub struct Renderer {
     constant_buffer_data: *mut u8,
     // 场景配置
     scene: SceneConfig,
+    // 相机组件
+    camera: Camera,
 }
 
 impl Renderer {
@@ -555,6 +560,34 @@ impl Renderer {
                 info!("Depth stencil buffer created: {}x{}", gfx.width, gfx.height);
             }
 
+            // 创建相机组件（从场景配置初始化）
+            let mut camera = Camera::main_camera();
+            camera.set_position(Vector3::new(
+                scene.camera.transform.position[0],
+                scene.camera.transform.position[1],
+                scene.camera.transform.position[2],
+            ));
+            let aspect_ratio = viewport.Width / viewport.Height;
+            camera.set_lens(
+                scene.camera.fov * PI / 180.0,
+                aspect_ratio,
+                scene.camera.near_clip,
+                scene.camera.far_clip,
+            );
+
+            // 如果有旋转，使用 look_at 设置相机朝向
+            let pitch = scene.camera.transform.rotation[0] * PI / 180.0;
+            let yaw = scene.camera.transform.rotation[1] * PI / 180.0;
+            let forward = Vector3::new(
+                yaw.sin() * pitch.cos(),
+                -pitch.sin(),
+                -yaw.cos() * pitch.cos(),
+            );
+            let target = camera.position() + forward;
+            camera.look_at(camera.position(), target, Vector3::new(0.0, 1.0, 0.0));
+
+            info!("Camera component initialized at position {:?}", camera.position());
+
             Ok(Self {
                 gfx,
                 root_signature,
@@ -577,6 +610,7 @@ impl Renderer {
                 constant_buffer,
                 constant_buffer_data: constant_buffer_data as *mut u8,
                 scene: scene.clone(),
+                camera,
             })
         }
     }
@@ -765,11 +799,14 @@ impl Renderer {
             self.command_list.Reset(allocator, Some(&self.pso))
                 .expect("Failed to reset CommandList");
 
-            // 计算 MVP 矩阵
+            // 更新相机的宽高比（如果窗口大小改变）
             let aspect_ratio = self.viewport.Width / self.viewport.Height;
+            self.camera.set_aspect(aspect_ratio);
+
+            // 计算 MVP 矩阵（使用 Camera 组件）
             let model = self.scene.model.transform.to_matrix();
-            let view = self.scene.camera.view_matrix();
-            let projection = self.scene.camera.projection_matrix(aspect_ratio);
+            let view = self.camera.view_matrix();
+            let projection = self.camera.proj_matrix();
 
             // 计算灯光参数
             let rot = self.scene.light.transform.rotation;
@@ -783,13 +820,14 @@ impl Renderer {
             let color = self.scene.light.color;
             let intensity = self.scene.light.intensity;
 
+            let camera_pos = self.camera.position();
             let ubo = UniformBufferObject::new(
                 &model,
                 &view,
                 &projection,
                 [dir.x, dir.y, dir.z],
                 [color[0]*intensity, color[1]*intensity, color[2]*intensity, intensity],
-                self.scene.camera.transform.position,
+                [camera_pos.x, camera_pos.y, camera_pos.z],
             );
 
             // 更新常量缓冲区数据

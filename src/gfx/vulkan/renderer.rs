@@ -34,7 +34,10 @@ use crate::gfx::{GraphicsBackend, VulkanBackend as GfxDevice};
 use crate::core::{Config, SceneConfig, Matrix4};
 use crate::core::error::{Result, DistRenderError, GraphicsError};
 use crate::geometry::loaders::{MeshLoader, ObjLoader};
+use crate::component::Camera;
+use crate::core::math::Vector3;
 use std::path::Path;
+use std::f32::consts::PI;
 
 /// Uniform Buffer Object - MVP 矩阵数据
 ///
@@ -87,6 +90,8 @@ pub struct Renderer {
     uniform_buffer_pool: CpuBufferPool<UniformBufferObject>,
     // 新增：场景配置
     scene: SceneConfig,
+    // 新增：相机组件
+    camera: Camera,
 }
 
 impl Renderer {
@@ -335,6 +340,34 @@ impl Renderer {
             info!("Uniform buffer pool created");
         }
 
+        // 创建相机组件（从场景配置初始化）
+        let mut camera = Camera::main_camera();
+        camera.set_position(Vector3::new(
+            scene.camera.transform.position[0],
+            scene.camera.transform.position[1],
+            scene.camera.transform.position[2],
+        ));
+        let aspect_ratio = viewport.dimensions[0] / viewport.dimensions[1];
+        camera.set_lens(
+            scene.camera.fov * PI / 180.0,
+            aspect_ratio,
+            scene.camera.near_clip,
+            scene.camera.far_clip,
+        );
+
+        // 如果有旋转，使用 look_at 设置相机朝向
+        let pitch = scene.camera.transform.rotation[0] * PI / 180.0;
+        let yaw = scene.camera.transform.rotation[1] * PI / 180.0;
+        let forward = Vector3::new(
+            yaw.sin() * pitch.cos(),
+            -pitch.sin(),
+            -yaw.cos() * pitch.cos(),
+        );
+        let target = camera.position() + forward;
+        camera.look_at(camera.position(), target, Vector3::new(0.0, 1.0, 0.0));
+
+        info!("Camera component initialized at position {:?}", camera.position());
+
         Ok(Self {
             gfx,
             swapchain,
@@ -352,6 +385,7 @@ impl Renderer {
             descriptor_manager,
             uniform_buffer_pool,
             scene: scene.clone(),
+            camera,
         })
     }
 
@@ -498,11 +532,14 @@ impl Renderer {
         #[cfg(debug_assertions)]
         trace!(image_index, "Building command buffer");
 
-        // 计算 MVP 矩阵
+        // 更新相机的宽高比（如果窗口大小改变）
         let aspect_ratio = self.viewport.dimensions[0] / self.viewport.dimensions[1];
+        self.camera.set_aspect(aspect_ratio);
+
+        // 计算 MVP 矩阵（使用 Camera 组件）
         let model = self.scene.model.transform.to_matrix();
-        let view = self.scene.camera.view_matrix();
-        let mut projection = self.scene.camera.projection_matrix(aspect_ratio);
+        let view = self.camera.view_matrix();
+        let mut projection = self.camera.proj_matrix();
 
         // Vulkan 的 NDC 坐标系 Y 轴与 DX12 相反，需要翻转
         // nalgebra 生成的是 OpenGL 风格的投影矩阵（Y 向上）
@@ -526,14 +563,14 @@ impl Renderer {
             light_color[2] * intensity,
             intensity,
         ];
-        let camera_pos = self.scene.camera.transform.position;
+        let camera_pos = self.camera.position();
         let ubo = UniformBufferObject::new(
             &model,
             &view,
             &projection,
             [dir.x, dir.y, dir.z],
             light_col_int,
-            camera_pos,
+            [camera_pos.x, camera_pos.y, camera_pos.z],
         );
 
         // 创建 uniform buffer

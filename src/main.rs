@@ -44,6 +44,7 @@
 
 mod core;
 mod geometry;
+mod component;
 mod renderer;
 mod gfx;
 
