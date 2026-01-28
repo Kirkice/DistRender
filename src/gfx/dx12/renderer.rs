@@ -10,7 +10,7 @@ use crate::renderer::resource::FrameResourcePool;
 use crate::renderer::sync::{FenceManager, FenceValue};
 use crate::gfx::dx12::descriptor::Dx12DescriptorManager;
 use crate::geometry::loaders::{MeshLoader, ObjLoader};
-use crate::component::Camera;
+use crate::component::{Camera, DirectionalLight};
 use crate::core::math::Vector3;
 use std::path::Path;
 use std::f32::consts::PI;
@@ -84,6 +84,8 @@ pub struct Renderer {
     scene: SceneConfig,
     // 相机组件
     camera: Camera,
+    // 方向光组件
+    directional_light: DirectionalLight,
 }
 
 impl Renderer {
@@ -589,6 +591,15 @@ impl Renderer {
 
             info!("Camera component initialized at position {:?}", camera.position());
 
+            // 初始化方向光组件
+            let directional_light = scene.light.to_directional_light("MainLight");
+            info!(
+                "DirectionalLight component initialized: color={:?}, intensity={}, direction={:?}",
+                directional_light.color.to_array(),
+                directional_light.intensity,
+                directional_light.direction
+            );
+
             Ok(Self {
                 gfx,
                 root_signature,
@@ -612,6 +623,7 @@ impl Renderer {
                 constant_buffer_data: constant_buffer_data as *mut u8,
                 scene: scene.clone(),
                 camera,
+                directional_light,
             })
         }
     }
@@ -809,25 +821,17 @@ impl Renderer {
             let view = self.camera.view_matrix();
             let projection = self.camera.proj_matrix();
 
-            // 计算灯光参数
-            let rot = self.scene.light.transform.rotation;
-            let pitch = rot[0].to_radians();
-            let yaw = rot[1].to_radians();
-            let dir = nalgebra::Vector3::new(
-                yaw.sin() * pitch.cos(),
-                -pitch.sin(),
-                -yaw.cos() * pitch.cos(),
-            ).normalize();
-            let color = self.scene.light.color;
-            let intensity = self.scene.light.intensity;
+            // 使用 DirectionalLight 组件获取灯光参数
+            let light_direction = self.directional_light.direction;
+            let light_color_intensity = self.directional_light.color.with_intensity(self.directional_light.intensity);
 
             let camera_pos = self.camera.position();
             let ubo = UniformBufferObject::new(
                 &model,
                 &view,
                 &projection,
-                [dir.x, dir.y, dir.z],
-                [color[0]*intensity, color[1]*intensity, color[2]*intensity, intensity],
+                [light_direction.x, light_direction.y, light_direction.z],
+                [light_color_intensity[0], light_color_intensity[1], light_color_intensity[2], self.directional_light.intensity],
                 [camera_pos.x, camera_pos.y, camera_pos.z],
             );
 

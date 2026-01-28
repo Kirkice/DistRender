@@ -119,6 +119,38 @@ impl Default for DirectionalLightConfig {
     }
 }
 
+impl DirectionalLightConfig {
+    /// 创建 DirectionalLight 组件
+    ///
+    /// 根据配置创建一个 DirectionalLight 实例，
+    /// 使用 transform.rotation 计算光照方向
+    pub fn to_directional_light(&self, name: impl Into<String>) -> crate::component::DirectionalLight {
+        use std::f32::consts::PI;
+        use crate::component::{DirectionalLight, Color};
+
+        // 将欧拉角转换为方向向量
+        let pitch = self.transform.rotation[0] * PI / 180.0;
+        let yaw = self.transform.rotation[1] * PI / 180.0;
+
+        // 计算光照方向（从旋转角度）
+        let direction = Vector3::new(
+            yaw.sin() * pitch.cos(),
+            -pitch.sin(),
+            -yaw.cos() * pitch.cos(),
+        ).normalize();
+
+        // 创建颜色
+        let color = Color::new(self.color[0], self.color[1], self.color[2]);
+
+        DirectionalLight::with_params(
+            name,
+            color,
+            self.intensity,
+            direction,
+        )
+    }
+}
+
 /// 相机配置
 ///
 /// 定义相机的位置、朝向和投影参数。

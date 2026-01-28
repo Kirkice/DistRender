@@ -34,7 +34,7 @@ use crate::gfx::{GraphicsBackend, VulkanBackend as GfxDevice};
 use crate::core::{Config, SceneConfig, Matrix4};
 use crate::core::error::{Result, DistRenderError, GraphicsError};
 use crate::geometry::loaders::{MeshLoader, ObjLoader};
-use crate::component::Camera;
+use crate::component::{Camera, DirectionalLight};
 use crate::core::math::Vector3;
 use std::path::Path;
 use std::f32::consts::PI;
@@ -92,6 +92,8 @@ pub struct Renderer {
     scene: SceneConfig,
     // 新增：相机组件
     camera: Camera,
+    // 新增：方向光组件
+    directional_light: DirectionalLight,
 }
 
 impl Renderer {
@@ -371,6 +373,15 @@ impl Renderer {
 
         info!("Camera component initialized at position {:?}", camera.position());
 
+        // 初始化方向光组件
+        let directional_light = scene.light.to_directional_light("MainLight");
+        info!(
+            "DirectionalLight component initialized: color={:?}, intensity={}, direction={:?}",
+            directional_light.color.to_array(),
+            directional_light.intensity,
+            directional_light.direction
+        );
+
         Ok(Self {
             gfx,
             swapchain,
@@ -389,6 +400,7 @@ impl Renderer {
             uniform_buffer_pool,
             scene: scene.clone(),
             camera,
+            directional_light,
         })
     }
 
@@ -549,29 +561,21 @@ impl Renderer {
         // Vulkan 的 Y 轴向下，所以需要翻转投影矩阵的 Y 分量
         projection[(1, 1)] *= -1.0;
 
-        // 计算灯光参数
-        let light_rot = self.scene.light.transform.rotation;
-        let pitch = light_rot[0].to_radians();
-        let yaw = light_rot[1].to_radians();
-        let dir = nalgebra::Vector3::new(
-            yaw.sin() * pitch.cos(),
-            -pitch.sin(),
-            -yaw.cos() * pitch.cos(),
-        ).normalize();
-        let light_color = self.scene.light.color;
-        let intensity = self.scene.light.intensity;
+        // 使用 DirectionalLight 组件获取光照参数
+        let light_direction = self.directional_light.direction;
+        let light_color_intensity = self.directional_light.color.with_intensity(self.directional_light.intensity);
         let light_col_int = [
-            light_color[0] * intensity,
-            light_color[1] * intensity,
-            light_color[2] * intensity,
-            intensity,
+            light_color_intensity[0],
+            light_color_intensity[1],
+            light_color_intensity[2],
+            self.directional_light.intensity,
         ];
         let camera_pos = self.camera.position();
         let ubo = UniformBufferObject::new(
             &model,
             &view,
             &projection,
-            [dir.x, dir.y, dir.z],
+            [light_direction.x, light_direction.y, light_direction.z],
             light_col_int,
             [camera_pos.x, camera_pos.y, camera_pos.z],
         );
