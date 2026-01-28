@@ -229,6 +229,9 @@ fn main() {
                     eprintln!("Draw failed: {}", e);
                     *control_flow = ControlFlow::Exit;
                 }
+
+                // 持续请求重绘以保持流畅动画
+                renderer.window().request_redraw();
             }
             // 忽略其他事件
             _ => (),

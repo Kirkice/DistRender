@@ -148,10 +148,10 @@ impl InputSystem {
         let distance = self.move_speed * delta_time;
 
         if self.pressed_keys.contains(&VirtualKeyCode::W) {
-            camera.walk(distance);
+            camera.walk(-distance);
         }
         if self.pressed_keys.contains(&VirtualKeyCode::S) {
-            camera.walk(-distance);
+            camera.walk(distance);
         }
         if self.pressed_keys.contains(&VirtualKeyCode::A) {
             camera.strafe(-distance);
@@ -175,8 +175,8 @@ impl InputSystem {
 
         // Convert pixel movement to radians
         // Match C++ version: 0.25 degrees per pixel
-        let dx = self.mouse_delta.0 * self.mouse_sensitivity * std::f32::consts::PI / 180.0;
-        let dy = self.mouse_delta.1 * self.mouse_sensitivity * std::f32::consts::PI / 180.0;
+        let dx = -self.mouse_delta.0 * self.mouse_sensitivity * std::f32::consts::PI / 180.0;
+        let dy = -self.mouse_delta.1 * self.mouse_sensitivity * std::f32::consts::PI / 180.0;
 
         camera.pitch(dy);
         camera.rotate_y(dx);
