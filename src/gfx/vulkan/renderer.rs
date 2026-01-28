@@ -205,11 +205,11 @@ impl Renderer {
 
         info!("Index buffer created: {} indices", index_buffer.len());
 
-        let vs_module = vs::load(gfx.device.clone())
+        let vs = vs::load(gfx.device.clone())
             .map_err(|e| DistRenderError::Graphics(
                 GraphicsError::ShaderCompilation(format!("Failed to load vertex shader: {:?}", e))
             ))?;
-        let fs_module = fs::load(gfx.device.clone())
+        let fs = fs::load(gfx.device.clone())
             .map_err(|e| DistRenderError::Graphics(
                 GraphicsError::ShaderCompilation(format!("Failed to load fragment shader: {:?}", e))
             ))?;
@@ -245,16 +245,15 @@ impl Renderer {
                     GraphicsError::ResourceCreation("Failed to create subpass".to_string())
                 ))?;
 
-            // 从 SPIR-V 加载的着色器使用 "VSMain" 和 "PSMain" 作为入口点
-            // (这是 HLSL 中定义的入口点名称)
-            let vs_entry = vs_module.entry_point("VSMain")
+            // GLSL shader 使用 "main" 作为入口点
+            let vs_entry = vs.entry_point("main")
                 .ok_or_else(|| DistRenderError::Graphics(
-                    GraphicsError::ShaderCompilation("Vertex shader 'VSMain' entry point not found".to_string())
+                    GraphicsError::ShaderCompilation("Vertex shader 'main' entry point not found".to_string())
                 ))?;
 
-            let fs_entry = fs_module.entry_point("PSMain")
+            let fs_entry = fs.entry_point("main")
                 .ok_or_else(|| DistRenderError::Graphics(
-                    GraphicsError::ShaderCompilation("Fragment shader 'PSMain' entry point not found".to_string())
+                    GraphicsError::ShaderCompilation("Fragment shader 'main' entry point not found".to_string())
                 ))?;
 
             GraphicsPipeline::start()
