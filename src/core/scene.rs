@@ -104,6 +104,7 @@ pub struct DirectionalLightConfig {
 
 fn default_light_color() -> [f32; 3] { [1.0, 1.0, 1.0] }
 fn default_light_intensity() -> f32 { 1.0 }
+fn default_clear_color() -> [f32; 4] { [0.0, 0.0, 0.2, 1.0] }
 
 impl Default for DirectionalLightConfig {
     fn default() -> Self {
@@ -244,6 +245,10 @@ pub struct SceneConfig {
     /// 平行光配置
     #[serde(default)]
     pub light: DirectionalLightConfig,
+
+    /// 背景清空颜色 (RGBA)，范围 0-1
+    #[serde(default = "default_clear_color")]
+    pub clear_color: [f32; 4],
 }
 
 impl Default for SceneConfig {
@@ -252,6 +257,7 @@ impl Default for SceneConfig {
             camera: CameraConfig::default(),
             model: ModelConfig::default(),
             light: DirectionalLightConfig::default(),
+            clear_color: default_clear_color(),
         }
     }
 }

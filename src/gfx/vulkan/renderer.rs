@@ -6,10 +6,14 @@ use vulkano::command_buffer::{
 };
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::image::view::ImageView;
-use vulkano::image::{ImageAccess, ImageUsage, SwapchainImage};
+use vulkano::image::{ImageAccess, ImageUsage, SwapchainImage, AttachmentImage};
+use vulkano::format::Format;
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
+use vulkano::pipeline::graphics::rasterization::{RasterizationState, CullMode, FrontFace};
+use vulkano::pipeline::StateMode;
+use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
 use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
 use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
 use vulkano::swapchain::{
@@ -71,6 +75,7 @@ pub struct Renderer {
     viewport: Viewport,
     recreate_swapchain: bool,
     previous_frame_end: Option<Box<dyn GpuFuture>>,
+    depth_image: Arc<AttachmentImage>,
 
     // 新增：帧资源管理
     frame_resource_pool: FrameResourcePool,
@@ -225,11 +230,17 @@ impl Renderer {
                     store: Store,
                     format: swapchain.image_format(),
                     samples: 1,
+                },
+                depth: {
+                    load: Clear,
+                    store: DontCare,
+                    format: Format::D32_SFLOAT,
+                    samples: 1,
                 }
             },
             pass: {
                 color: [color],
-                depth_stencil: {}
+                depth_stencil: {depth}
             }
         )
         .map_err(|e| DistRenderError::Graphics(
@@ -261,6 +272,14 @@ impl Renderer {
                 .vertex_shader(vs_entry, ())
                 .input_assembly_state(InputAssemblyState::new())
                 .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
+                .rasterization_state(RasterizationState {
+                    cull_mode: StateMode::Fixed(CullMode::Back),
+                    // 由于投影矩阵翻转了 Y 轴，三角形绕序也会反转
+                    // DX12 默认顺时针为正面，所以这里也设置为顺时针
+                    front_face: StateMode::Fixed(FrontFace::Clockwise),
+                    ..Default::default()
+                })
+                .depth_stencil_state(DepthStencilState::simple_depth_test())
                 .fragment_shader(fs_entry, ())
                 .render_pass(subpass)
                 .build(gfx.device.clone())
@@ -278,7 +297,22 @@ impl Renderer {
             depth_range: 0.0..1.0,
         };
 
-        let framebuffers = window_size_dependent_setup(&images, render_pass.clone(), &mut viewport)?;
+        // 创建深度图像
+        let dimensions = images[0].dimensions().width_height();
+        let depth_image = AttachmentImage::with_usage(
+            &gfx.memory_allocator,
+            dimensions,
+            Format::D32_SFLOAT,
+            ImageUsage {
+                depth_stencil_attachment: true,
+                ..ImageUsage::empty()
+            },
+        )
+        .map_err(|e| DistRenderError::Graphics(
+            GraphicsError::ResourceCreation(format!("Failed to create depth image: {:?}", e))
+        ))?;
+
+        let framebuffers = window_size_dependent_setup(&images, render_pass.clone(), depth_image.clone(), &mut viewport)?;
 
         let previous_frame_end = Some(sync::now(gfx.device.clone()).boxed());
 
@@ -312,6 +346,7 @@ impl Renderer {
             viewport,
             recreate_swapchain: false,
             previous_frame_end,
+            depth_image,
             frame_resource_pool,
             fence_manager,
             descriptor_manager,
@@ -405,9 +440,26 @@ impl Renderer {
             );
 
             self.swapchain = new_swapchain;
+
+            // 重新创建深度图像
+            let new_dimensions = new_images[0].dimensions().width_height();
+            self.depth_image = AttachmentImage::with_usage(
+                &self.gfx.memory_allocator,
+                new_dimensions,
+                Format::D32_SFLOAT,
+                ImageUsage {
+                    depth_stencil_attachment: true,
+                    ..ImageUsage::empty()
+                },
+            )
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::ResourceCreation(format!("Failed to create depth image: {:?}", e))
+            ))?;
+
             self.framebuffers = window_size_dependent_setup(
                 &new_images,
                 self.render_pass.clone(),
+                self.depth_image.clone(),
                 &mut self.viewport,
             )?;
             self.recreate_swapchain = false;
@@ -450,7 +502,12 @@ impl Renderer {
         let aspect_ratio = self.viewport.dimensions[0] / self.viewport.dimensions[1];
         let model = self.scene.model.transform.to_matrix();
         let view = self.scene.camera.view_matrix();
-        let projection = self.scene.camera.projection_matrix(aspect_ratio);
+        let mut projection = self.scene.camera.projection_matrix(aspect_ratio);
+
+        // Vulkan 的 NDC 坐标系 Y 轴与 DX12 相反，需要翻转
+        // nalgebra 生成的是 OpenGL 风格的投影矩阵（Y 向上）
+        // Vulkan 的 Y 轴向下，所以需要翻转投影矩阵的 Y 分量
+        projection[(1, 1)] *= -1.0;
 
         // 计算灯光参数
         let light_rot = self.scene.light.transform.rotation;
@@ -513,7 +570,10 @@ impl Renderer {
         builder
             .begin_render_pass(
                 RenderPassBeginInfo {
-                    clear_values: vec![Some([0.0, 0.0, 0.2, 1.0].into())],
+                    clear_values: vec![
+                        Some(self.scene.clear_color.into()),
+                        Some(1.0f32.into()),  // 深度缓冲清空为1.0（最远）
+                    ],
                     ..RenderPassBeginInfo::framebuffer(
                         self.framebuffers[image_index as usize].clone(),
                     )
@@ -602,10 +662,16 @@ impl Renderer {
 fn window_size_dependent_setup(
     images: &[Arc<SwapchainImage>],
     render_pass: Arc<RenderPass>,
+    depth_image: Arc<AttachmentImage>,
     viewport: &mut Viewport,
 ) -> Result<Vec<Arc<Framebuffer>>> {
     let dimensions = images[0].dimensions().width_height();
     viewport.dimensions = [dimensions[0] as f32, dimensions[1] as f32];
+
+    let depth_view = ImageView::new_default(depth_image)
+        .map_err(|e| DistRenderError::Graphics(
+            GraphicsError::ResourceCreation(format!("Failed to create depth image view: {:?}", e))
+        ))?;
 
     images
         .iter()
@@ -617,7 +683,7 @@ fn window_size_dependent_setup(
             Framebuffer::new(
                 render_pass.clone(),
                 FramebufferCreateInfo {
-                    attachments: vec![view],
+                    attachments: vec![view, depth_view.clone()],
                     ..Default::default()
                 },
             )

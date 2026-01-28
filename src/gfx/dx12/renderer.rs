@@ -63,6 +63,10 @@ pub struct Renderer {
     command_allocators: [ID3D12CommandAllocator; FRAME_COUNT],
     command_list: ID3D12GraphicsCommandList,
 
+    // 深度/模板缓冲
+    depth_stencil_heap: ID3D12DescriptorHeap,
+    depth_stencil_buffer: ID3D12Resource,
+
     // 使用新的帧资源管理系统（替代fence_values）
     frame_resource_pool: FrameResourcePool,
     // 使用新的Fence管理器
@@ -256,22 +260,22 @@ impl Renderer {
             };
             pso_desc.RasterizerState = D3D12_RASTERIZER_DESC {
                 FillMode: D3D12_FILL_MODE_SOLID,
-                CullMode: D3D12_CULL_MODE_NONE,
+                CullMode: D3D12_CULL_MODE_BACK,  // 背面剔除
                 ..Default::default()
             };
-            // 显式禁用深度测试（因为我们没有深度缓冲区）
+            // 启用深度测试
             pso_desc.DepthStencilState = D3D12_DEPTH_STENCIL_DESC {
-                DepthEnable: false.into(),
-                DepthWriteMask: D3D12_DEPTH_WRITE_MASK_ZERO,
-                DepthFunc: D3D12_COMPARISON_FUNC_ALWAYS,
+                DepthEnable: true.into(),
+                DepthWriteMask: D3D12_DEPTH_WRITE_MASK_ALL,
+                DepthFunc: D3D12_COMPARISON_FUNC_LESS,  // 深度值小的通过（更近的物体）
                 StencilEnable: false.into(),
-                StencilReadMask: 0,
-                StencilWriteMask: 0,
+                StencilReadMask: 0xFF,
+                StencilWriteMask: 0xFF,
                 FrontFace: D3D12_DEPTH_STENCILOP_DESC::default(),
                 BackFace: D3D12_DEPTH_STENCILOP_DESC::default(),
             };
             pso_desc.SampleMask = 0xFFFFFFFF;
-            pso_desc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+            pso_desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;  // 32位浮点深度格式
             pso_desc.InputLayout = D3D12_INPUT_LAYOUT_DESC {
                 pInputElementDescs: input_element_descs.as_ptr(),
                 NumElements: input_element_descs.len() as u32,
@@ -486,11 +490,69 @@ impl Renderer {
             // 初始化 SRV/CBV/UAV 堆（预分配128个描述符，参考 DistEngine）
             descriptor_manager.init_srv_cbv_uav_heap(&gfx.device, 128)?;
 
+            // 创建深度模板堆（单独的堆用于DSV）
+            let dsv_heap_desc = D3D12_DESCRIPTOR_HEAP_DESC {
+                Type: D3D12_DESCRIPTOR_HEAP_TYPE_DSV,
+                NumDescriptors: 1,
+                Flags: D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
+                NodeMask: 0,
+            };
+            let depth_stencil_heap: ID3D12DescriptorHeap = gfx.device
+                .CreateDescriptorHeap(&dsv_heap_desc)
+                .expect("Failed to create DSV heap");
+
+            // 创建深度模板缓冲资源
+            let depth_heap_props = D3D12_HEAP_PROPERTIES {
+                Type: D3D12_HEAP_TYPE_DEFAULT,
+                ..Default::default()
+            };
+            let depth_resource_desc = D3D12_RESOURCE_DESC {
+                Dimension: D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+                Width: gfx.width as u64,
+                Height: gfx.height,
+                DepthOrArraySize: 1,
+                MipLevels: 1,
+                Format: DXGI_FORMAT_D32_FLOAT,
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                Layout: D3D12_TEXTURE_LAYOUT_UNKNOWN,
+                Flags: D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL,
+                ..Default::default()
+            };
+
+            let clear_value = D3D12_CLEAR_VALUE {
+                Format: DXGI_FORMAT_D32_FLOAT,
+                Anonymous: D3D12_CLEAR_VALUE_0 {
+                    DepthStencil: D3D12_DEPTH_STENCIL_VALUE {
+                        Depth: 1.0,
+                        Stencil: 0,
+                    },
+                },
+            };
+
+            let mut depth_stencil_buffer: Option<ID3D12Resource> = None;
+            gfx.device.CreateCommittedResource(
+                &depth_heap_props,
+                D3D12_HEAP_FLAG_NONE,
+                &depth_resource_desc,
+                D3D12_RESOURCE_STATE_DEPTH_WRITE,
+                Some(&clear_value),
+                &mut depth_stencil_buffer,
+            ).expect("Failed to create depth stencil buffer");
+            let depth_stencil_buffer = depth_stencil_buffer.unwrap();
+
+            // 创建深度模板视图
+            gfx.device.CreateDepthStencilView(
+                &depth_stencil_buffer,
+                None,
+                depth_stencil_heap.GetCPUDescriptorHandleForHeapStart(),
+            );
+
             #[cfg(debug_assertions)]
             {
                 info!("DX12 Renderer initialized successfully with double buffering");
                 debug!("Descriptor heaps initialized: RTV={}, DSV={}, SRV/CBV/UAV={}",
                     FRAME_COUNT, 1, 128);
+                info!("Depth stencil buffer created: {}x{}", gfx.width, gfx.height);
             }
 
             Ok(Self {
@@ -507,6 +569,8 @@ impl Renderer {
                 scissor_rect,
                 command_allocators,
                 command_list,
+                depth_stencil_heap,
+                depth_stencil_buffer,
                 frame_resource_pool,
                 fence_manager,
                 descriptor_manager,
@@ -595,6 +659,52 @@ impl Renderer {
                 };
                 self.gfx.device.CreateRenderTargetView(&surface, None, handle);
             }
+
+            // 重新创建深度模板缓冲
+            let depth_heap_props = D3D12_HEAP_PROPERTIES {
+                Type: D3D12_HEAP_TYPE_DEFAULT,
+                ..Default::default()
+            };
+            let depth_resource_desc = D3D12_RESOURCE_DESC {
+                Dimension: D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+                Width: size.width as u64,
+                Height: size.height,
+                DepthOrArraySize: 1,
+                MipLevels: 1,
+                Format: DXGI_FORMAT_D32_FLOAT,
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                Layout: D3D12_TEXTURE_LAYOUT_UNKNOWN,
+                Flags: D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL,
+                ..Default::default()
+            };
+
+            let clear_value = D3D12_CLEAR_VALUE {
+                Format: DXGI_FORMAT_D32_FLOAT,
+                Anonymous: D3D12_CLEAR_VALUE_0 {
+                    DepthStencil: D3D12_DEPTH_STENCIL_VALUE {
+                        Depth: 1.0,
+                        Stencil: 0,
+                    },
+                },
+            };
+
+            let mut new_depth_buffer: Option<ID3D12Resource> = None;
+            self.gfx.device.CreateCommittedResource(
+                &depth_heap_props,
+                D3D12_HEAP_FLAG_NONE,
+                &depth_resource_desc,
+                D3D12_RESOURCE_STATE_DEPTH_WRITE,
+                Some(&clear_value),
+                &mut new_depth_buffer,
+            ).expect("Failed to create depth stencil buffer during resize");
+            self.depth_stencil_buffer = new_depth_buffer.unwrap();
+
+            // 重新创建深度模板视图
+            self.gfx.device.CreateDepthStencilView(
+                &self.depth_stencil_buffer,
+                None,
+                self.depth_stencil_heap.GetCPUDescriptorHandleForHeapStart(),
+            );
 
             // 更新 viewport 和 scissor rect
             self.viewport.Width = size.width as f32;
@@ -708,12 +818,23 @@ impl Renderer {
             };
             self.command_list.ResourceBarrier(&[barrier]);
 
-            // Clear RTV
+            // 设置渲染目标和深度模板
             let rtv_handle = D3D12_CPU_DESCRIPTOR_HANDLE {
                 ptr: self.gfx.rtv_heap.GetCPUDescriptorHandleForHeapStart().ptr + (self.gfx.frame_index * self.gfx.rtv_descriptor_size),
             };
-            let clear_color = [0.0, 0.0, 0.2, 1.0]; // Dark Blue to distinguish
-            self.command_list.ClearRenderTargetView(rtv_handle, &clear_color, None);
+            let dsv_handle = self.depth_stencil_heap.GetCPUDescriptorHandleForHeapStart();
+
+            self.command_list.OMSetRenderTargets(1, Some(&rtv_handle), false, Some(&dsv_handle));
+
+            // 清空渲染目标和深度缓冲
+            self.command_list.ClearRenderTargetView(rtv_handle, &self.scene.clear_color, None);
+            self.command_list.ClearDepthStencilView(
+                dsv_handle,
+                D3D12_CLEAR_FLAG_DEPTH,
+                1.0,  // 深度清空为1.0（最远）
+                0,
+                None,
+            );
 
             // Draw
             self.command_list.SetGraphicsRootSignature(&self.root_signature);

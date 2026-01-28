@@ -154,12 +154,16 @@ impl MeshLoader for ObjLoader {
         if !has_normals {
             tracing::info!("OBJ 文件缺少法线数据，正在重建...");
             reconstruct_normals(&mut mesh_data.vertices, &mesh_data.indices);
-        }
 
-        // 后处理：seam 平滑处理（按 position 聚类法线）
-        // OBJ 常在 UV seam 处拆顶点，导致同位置不同法线，从而出现“切边”。
-        // 这里用一个小的 epsilon 将同一位置附近的顶点归为一组并平均法线。
-        smooth_normals_by_position(&mut mesh_data.vertices, 1e-5);
+            // 后处理：seam 平滑处理（按 position 聚类法线）
+            // OBJ 常在 UV seam 处拆顶点，导致同位置不同法线，从而出现"切边"。
+            // 这里用一个小的 epsilon 将同一位置附近的顶点归为一组并平均法线。
+            // 注意：只在重建法线时才执行平滑，保留原始 OBJ 文件提供的法线数据
+            tracing::info!("平滑重建的法线...");
+            smooth_normals_by_position(&mut mesh_data.vertices, 1e-5);
+        } else {
+            tracing::info!("使用 OBJ 文件提供的法线数据");
+        }
 
         // 后处理：计算切线空间（如果有UV坐标）
         if has_texcoords {

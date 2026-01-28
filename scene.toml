@@ -1,5 +1,9 @@
 # 场景示例配置
 
+# 背景清空颜色 (RGBA)，范围 0-1
+# 默认为深蓝色 [0.0, 0.0, 0.2, 1.0]
+clear_color = [0.0, 0.0, 0.0, 1.0]
+
 [camera]
   [camera.transform]
   position = [0.0, 0.0, 5.0]
@@ -14,4 +18,4 @@
   intensity = 1.0
   color = [1.0, 1.0, 1.0]
   [light.transform]
-  rotation = [-45.0, 45.0, 0.0]
+  rotation = [50.0, 120.0, 0.0]
