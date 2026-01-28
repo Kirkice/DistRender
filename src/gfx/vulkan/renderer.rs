@@ -17,7 +17,7 @@ use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
 use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
 use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
 use vulkano::swapchain::{
-    acquire_next_image, AcquireError, Swapchain, SwapchainCreateInfo, SwapchainCreationError,
+    acquire_next_image, AcquireError, PresentMode, Swapchain, SwapchainCreateInfo, SwapchainCreationError,
     SwapchainPresentInfo,
 };
 use vulkano::sync::{self, FlushError, GpuFuture};
@@ -141,6 +141,9 @@ impl Renderer {
                         ..ImageUsage::empty()
                     },
                     composite_alpha,
+                    // 使用 Mailbox 模式实现三重缓冲，提供流畅的渲染
+                    // 如果不支持则回退到 Immediate（无垂直同步）
+                    present_mode: PresentMode::Mailbox,
                     ..Default::default()
                 },
             )
