@@ -18,6 +18,9 @@
 //! - `Quaternion`：四元数，用于旋转
 //! - `Color`：颜色类型（RGBA）
 
+// 允许未使用的代码，因为这是一个工具库，不是所有函数都会立即使用
+#![allow(dead_code)]
+
 pub use nalgebra::{
     Matrix3 as Mat3, Matrix4 as Mat4, Point3, UnitQuaternion,
     Vector2 as Vec2, Vector3 as Vec3, Vector4 as Vec4,

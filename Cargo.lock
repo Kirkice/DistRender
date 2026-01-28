@@ -3,27 +3,6 @@
 version = 4
 
 [[package]]
-name = "DistRender"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytemuck",
- "image",
- "nalgebra",
- "serde",
- "tobj",
- "toml",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "vulkano",
- "vulkano-shaders",
- "vulkano-win",
- "windows",
- "winit",
-]
-
-[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -441,6 +420,27 @@ name = "dispatch"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd0c93bb4b0c6d9b77f4435b0ae98c24d17f1c45b2ff844c6151a07256ca923b"
+
+[[package]]
+name = "dist_render"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "image",
+ "nalgebra",
+ "serde",
+ "tobj",
+ "toml",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "vulkano",
+ "vulkano-shaders",
+ "vulkano-win",
+ "windows",
+ "winit",
+]
 
 [[package]]
 name = "dlib"

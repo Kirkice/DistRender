@@ -123,12 +123,12 @@ pub fn init_logger(level: LogLevel, file_output: bool, log_file_path: Option<&st
 /// 初始化简单的日志系统（仅控制台输出）
 ///
 /// 使用默认的 Info 级别。
+#[allow(dead_code)]
 pub fn init_simple() {
     init_logger(LogLevel::Info, false, None);
 }
 
 // 重新导出 tracing 的宏，提供类似 spdlog 的接口
-pub use tracing::{debug, error, info, trace, warn};
 
 // 定义类似 DistEngine 的宏
 /// 引擎核心日志 - Info 级别
@@ -193,6 +193,7 @@ impl From<LogLevel> for Level {
 }
 
 /// 日志辅助函数：检查日志级别是否启用
+#[allow(dead_code)]
 pub fn is_enabled(level: Level) -> bool {
     tracing::level_filters::LevelFilter::current() >= level
 }

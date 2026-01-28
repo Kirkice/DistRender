@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::mem::ManuallyDrop;
 use tracing::{trace, debug, info};
 use winit::event_loop::EventLoop;

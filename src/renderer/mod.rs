@@ -24,7 +24,7 @@
 //! renderer.draw();
 //! ```
 
-use tracing::{trace, debug, info, warn, error};
+use tracing::info;
 use winit::event_loop::EventLoop;
 use crate::renderer::vulkan::Renderer as VulkanRenderer;
 use crate::renderer::dx12::Renderer as Dx12Renderer;

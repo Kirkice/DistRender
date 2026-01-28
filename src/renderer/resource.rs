@@ -10,7 +10,6 @@
 //! - **生命周期管理**：使用Rust所有权系统自动管理资源生命周期
 //! - **类型安全**：通过泛型和trait约束保证类型安全
 
-use crate::core::error::{Result, DistRenderError, GraphicsError};
 use std::marker::PhantomData;
 
 /// 缓冲区使用类型

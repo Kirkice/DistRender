@@ -2,7 +2,6 @@
 ///
 /// 使用 tobj crate 加载 Wavefront OBJ 格式的3D模型。
 /// 支持顶点位置、法线、纹理坐标的加载，并可自动重建缺失的法线和切线。
-
 use super::MeshLoader;
 use crate::core::error::{MeshLoadError, Result};
 use crate::geometry::mesh::{MeshData, Subset};

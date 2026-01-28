@@ -21,6 +21,7 @@ pub type Result<T> = std::result::Result<T, DistRenderError>;
 ///
 /// 包含了引擎运行过程中可能遇到的各种错误情况。
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum DistRenderError {
     /// 配置错误
     Config(ConfigError),
@@ -46,6 +47,7 @@ pub enum DistRenderError {
 
 /// 配置相关的错误
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum ConfigError {
     /// 配置文件未找到
     FileNotFound(String),
@@ -81,6 +83,7 @@ pub enum GraphicsError {
 
 /// 网格加载相关的错误
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum MeshLoadError {
     /// 文件不存在
     FileNotFound(PathBuf),

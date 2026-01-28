@@ -16,7 +16,6 @@
 /// let mesh = ObjLoader::load_from_file(Path::new("model.obj"))?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-
 use crate::core::error::Result;
 use crate::geometry::mesh::MeshData;
 use std::path::Path;

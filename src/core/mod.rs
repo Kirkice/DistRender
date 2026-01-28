@@ -28,14 +28,6 @@ pub mod event;
 pub mod scene;
 
 // 重新导出常用类型，方便使用
-pub use math::{Vector2, Vector3, Vector4, Matrix4, Quaternion, Color};
-pub use error::{Result, DistRenderError};
+pub use math::Matrix4;
 pub use config::Config;
-pub use event::{
-    Event, EventType, EventDispatcher, EventHandler,
-    WindowResizeEvent, WindowCloseEvent,
-    MouseButtonEvent, MouseMoveEvent, MouseScrollEvent, MouseButton,
-    KeyboardEvent, KeyCode,
-    TickEvent, DrawEvent,
-};
-pub use scene::{SceneConfig, CameraConfig, ModelConfig, Transform};
+pub use scene::SceneConfig;

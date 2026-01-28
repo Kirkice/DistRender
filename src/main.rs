@@ -48,7 +48,7 @@ mod renderer;
 mod gfx;
 
 use core::{Config, SceneConfig, log};
-use tracing::{info, error, debug, warn};
+use tracing::{info, error, debug};
 use renderer::Renderer;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};

@@ -16,7 +16,7 @@
 //! 5. 创建内存和命令缓冲分配器
 
 use std::sync::Arc;
-use tracing::{trace, debug, info, warn, error};
+use tracing::{debug, info};
 use vulkano::command_buffer::allocator::{
     StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo,
 };

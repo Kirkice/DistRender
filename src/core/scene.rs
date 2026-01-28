@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::fs;
 use crate::core::error::{Result, DistRenderError, ConfigError};
-use crate::core::math::{Vector3, Matrix4, Color};
+use crate::core::math::{Vector3, Matrix4};
 
 /// 3D 变换数据
 ///
@@ -305,6 +305,7 @@ impl SceneConfig {
     }
 
     /// 保存配置到文件
+    #[allow(dead_code)]
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path = path.as_ref();
         let contents = toml::to_string_pretty(self)

@@ -2,7 +2,6 @@
 ///
 /// 定义CPU侧的网格数据容器，用于存储从文件加载的原始几何数据。
 /// 对应 DistEngine 的 MeshData 和 Subset 结构。
-
 use super::vertex::Vertex;
 
 /// 子网格描述符

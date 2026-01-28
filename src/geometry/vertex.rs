@@ -2,7 +2,6 @@
 ///
 /// 定义用于3D模型加载的完整顶点结构，包含位置、法线、UV坐标和切线向量。
 /// 对应 DistEngine 的 Vertex 结构。
-
 use bytemuck::{Pod, Zeroable};
 
 /// 完整的3D顶点结构

@@ -36,12 +36,9 @@
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-
 pub mod vertex;
 pub mod mesh;
 pub mod math_utils;
 pub mod loaders;
 
 // 重新导出常用类型
-pub use vertex::Vertex;
-pub use mesh::{MeshData, Subset};

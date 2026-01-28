@@ -219,6 +219,7 @@ impl Config {
     /// # 返回值
     ///
     /// 成功返回 `Ok(())`，失败返回错误
+    #[allow(dead_code)]
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let contents = toml::to_string_pretty(self)
             .map_err(|e| ConfigError::ParseError(e.to_string()))?;
@@ -297,16 +298,19 @@ impl Config {
 
 impl GraphicsBackend {
     /// 检查是否为 DX12 后端
+    #[allow(dead_code)]
     pub fn is_dx12(&self) -> bool {
         matches!(self, GraphicsBackend::Dx12)
     }
 
     /// 检查是否为 Vulkan 后端
+    #[allow(dead_code)]
     pub fn is_vulkan(&self) -> bool {
         matches!(self, GraphicsBackend::Vulkan)
     }
 
     /// 获取后端名称
+    #[allow(dead_code)]
     pub fn name(&self) -> &'static str {
         match self {
             GraphicsBackend::Vulkan => "Vulkan",

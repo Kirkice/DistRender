@@ -19,7 +19,7 @@
 //! 7. 创建同步对象（Fence）
 
 use std::sync::Arc;
-use tracing::{trace, debug, info, warn, error};
+use tracing::{debug, info, warn};
 use windows::{
     core::*, Win32::Graphics::Direct3D::*, Win32::Graphics::Direct3D12::*,
     Win32::Graphics::Dxgi::Common::*, Win32::Graphics::Dxgi::*,

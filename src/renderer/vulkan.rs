@@ -24,7 +24,7 @@ use bytemuck::{Pod, Zeroable};
 use crate::renderer::vertex::{MyVertex, create_default_triangle, convert_geometry_vertex};
 use crate::renderer::shaders::{vs, fs};
 use crate::renderer::resource::FrameResourcePool;
-use crate::renderer::sync::{FenceManager, FenceValue};
+use crate::renderer::sync::FenceManager;
 use crate::renderer::descriptor_vulkan::VulkanDescriptorManager;
 use crate::gfx::{GraphicsBackend, VulkanBackend as GfxDevice};
 use crate::core::{Config, SceneConfig, Matrix4};
@@ -205,11 +205,11 @@ impl Renderer {
 
         info!("Index buffer created: {} indices", index_buffer.len());
 
-        let vs = vs::load(gfx.device.clone())
+        let vs_module = vs::load(gfx.device.clone())
             .map_err(|e| DistRenderError::Graphics(
                 GraphicsError::ShaderCompilation(format!("Failed to load vertex shader: {:?}", e))
             ))?;
-        let fs = fs::load(gfx.device.clone())
+        let fs_module = fs::load(gfx.device.clone())
             .map_err(|e| DistRenderError::Graphics(
                 GraphicsError::ShaderCompilation(format!("Failed to load fragment shader: {:?}", e))
             ))?;
@@ -245,14 +245,16 @@ impl Renderer {
                     GraphicsError::ResourceCreation("Failed to create subpass".to_string())
                 ))?;
 
-            let vs_entry = vs.entry_point("main")
+            // 从 SPIR-V 加载的着色器使用 "VSMain" 和 "PSMain" 作为入口点
+            // (这是 HLSL 中定义的入口点名称)
+            let vs_entry = vs_module.entry_point("VSMain")
                 .ok_or_else(|| DistRenderError::Graphics(
-                    GraphicsError::ShaderCompilation("Vertex shader 'main' entry point not found".to_string())
+                    GraphicsError::ShaderCompilation("Vertex shader 'VSMain' entry point not found".to_string())
                 ))?;
 
-            let fs_entry = fs.entry_point("main")
+            let fs_entry = fs_module.entry_point("PSMain")
                 .ok_or_else(|| DistRenderError::Graphics(
-                    GraphicsError::ShaderCompilation("Fragment shader 'main' entry point not found".to_string())
+                    GraphicsError::ShaderCompilation("Fragment shader 'PSMain' entry point not found".to_string())
                 ))?;
 
             GraphicsPipeline::start()
