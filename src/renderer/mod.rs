@@ -158,4 +158,33 @@ impl Renderer {
             Backend::Dx12(r) => r.draw(),
         }
     }
+
+    /// Update camera based on input system state
+    ///
+    /// Should be called every frame before `draw()` to apply user input to camera.
+    ///
+    /// # Parameters
+    ///
+    /// * `input_system` - Input system containing current keyboard/mouse state
+    /// * `delta_time` - Time elapsed since last frame in seconds
+    pub fn update(&mut self, input_system: &mut crate::core::input::InputSystem, delta_time: f32) {
+        match &mut self.backend {
+            Backend::Vulkan(r) => r.update(input_system, delta_time),
+            Backend::Dx12(r) => r.update(input_system, delta_time),
+        }
+    }
+
+    /// Get a reference to the window
+    ///
+    /// Returns the window associated with this renderer for cursor control and other operations.
+    ///
+    /// # Returns
+    ///
+    /// Reference to the winit Window
+    pub fn window(&self) -> &winit::window::Window {
+        match &self.backend {
+            Backend::Vulkan(r) => r.window(),
+            Backend::Dx12(r) => r.window(),
+        }
+    }
 }

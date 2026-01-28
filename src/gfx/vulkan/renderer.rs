@@ -694,6 +694,13 @@ impl Renderer {
 
         Ok(())
     }
+
+    /// Update camera based on input system state
+    ///
+    /// Called every frame before draw() to apply user input to camera
+    pub fn update(&mut self, input_system: &mut crate::core::input::InputSystem, delta_time: f32) {
+        input_system.update_camera(&mut self.camera, delta_time);
+    }
 }
 
 fn window_size_dependent_setup(

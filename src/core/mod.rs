@@ -26,6 +26,7 @@ pub mod config;
 pub mod error;
 pub mod event;
 pub mod scene;
+pub mod input;
 
 // 重新导出常用类型，方便使用
 pub use math::Matrix4;

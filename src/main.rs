@@ -49,10 +49,12 @@ mod renderer;
 mod gfx;
 
 use core::{Config, SceneConfig, log};
+use core::input::InputSystem;
 use tracing::{info, error, debug};
 use renderer::Renderer;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
+use std::time::Instant;
 
 /// 应用程序入口点
 ///
@@ -139,9 +141,17 @@ fn main() {
     info!("Scene configuration integrated with renderer successfully");
 
     info!("Renderer initialized successfully");
+
+    // 9. 创建输入系统
+    let mut input_system = InputSystem::new();
+    info!("Input system initialized");
+
+    // 10. 时间跟踪
+    let mut last_frame = Instant::now();
+
     info!("Entering main loop...");
 
-    // 9. 启动事件循环
+    // 11. 启动事件循环
     event_loop.run(move |event, _, control_flow| {
         match event {
             // 窗口关闭事件
@@ -164,8 +174,56 @@ fn main() {
                 );
                 renderer.resize();
             }
+            // 键盘输入事件
+            Event::WindowEvent {
+                event: WindowEvent::KeyboardInput {
+                    input: winit::event::KeyboardInput {
+                        virtual_keycode: Some(keycode),
+                        state,
+                        ..
+                    },
+                    ..
+                },
+                ..
+            } => {
+                input_system.on_keyboard_input(keycode, state);
+            }
+            // 鼠标按钮事件
+            Event::WindowEvent {
+                event: WindowEvent::MouseInput { button, state, .. },
+                ..
+            } => {
+                let window = renderer.window();
+                input_system.on_mouse_button(window, button, state);
+            }
+            // 鼠标移动事件
+            Event::WindowEvent {
+                event: WindowEvent::CursorMoved { position, .. },
+                ..
+            } => {
+                input_system.on_mouse_move((position.x, position.y));
+            }
+            // 窗口焦点丢失事件
+            Event::WindowEvent {
+                event: WindowEvent::Focused(false),
+                ..
+            } => {
+                let window = renderer.window();
+                input_system.unlock_cursor(window);
+                input_system.reset_mouse();
+                debug!("Window focus lost, cursor unlocked and input reset");
+            }
             // 准备绘制下一帧
             Event::RedrawEventsCleared => {
+                // 计算 delta time
+                let now = Instant::now();
+                let delta_time = now.duration_since(last_frame).as_secs_f32();
+                last_frame = now;
+
+                // 更新相机（应用输入）
+                renderer.update(&mut input_system, delta_time);
+
+                // 绘制帧
                 if let Err(e) = renderer.draw() {
                     error!("Draw failed: {}", e);
                     eprintln!("Draw failed: {}", e);

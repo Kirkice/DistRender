@@ -2,6 +2,7 @@ use std::mem::ManuallyDrop;
 use tracing::{trace, debug, info};
 use winit::event_loop::EventLoop;
 use crate::gfx::Dx12Backend;
+use crate::gfx::backend::GraphicsBackend;
 use crate::core::{Config, SceneConfig, Matrix4};
 use crate::core::error::{Result, DistRenderError, GraphicsError};
 use crate::renderer::vertex::{MyVertex, create_default_triangle, convert_geometry_vertex};
@@ -951,6 +952,18 @@ impl Renderer {
 
             Ok(())
         }
+    }
+
+    /// Update camera based on input system state
+    ///
+    /// Called every frame before draw() to apply user input to camera
+    pub fn update(&mut self, input_system: &mut crate::core::input::InputSystem, delta_time: f32) {
+        input_system.update_camera(&mut self.camera, delta_time);
+    }
+
+    /// Get a reference to the window for cursor control
+    pub fn window(&self) -> &winit::window::Window {
+        self.gfx.window()
     }
 }
 
