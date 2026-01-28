@@ -6,7 +6,7 @@ clear_color = [0.0, 0.0, 0.0, 1.0]
 
 [camera]
   [camera.transform]
-  position = [0.0, 0.0, 5.0]
+  position = [0.0, 0.0, -5.0]
   rotation = [0.0, 0.0, 0.0]
 
 [model]
