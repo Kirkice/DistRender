@@ -24,10 +24,10 @@ use windows::{
     core::*, Win32::Graphics::Direct3D::*, Win32::Graphics::Direct3D12::*,
     Win32::Graphics::Dxgi::Common::*, Win32::Graphics::Dxgi::*,
 };
-use winit::platform::windows::WindowExtWindows;
 use winit::window::{Window, WindowBuilder};
 use winit::event_loop::EventLoop;
 use winit::dpi::LogicalSize;
+use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 use crate::gfx::backend::GraphicsBackend;
 use crate::core::Config;
@@ -163,7 +163,14 @@ impl Dx12Backend {
             let command_queue: ID3D12CommandQueue = device.CreateCommandQueue(&queue_desc).unwrap();
 
             // 5. 创建交换链
-            let hwnd = windows::Win32::Foundation::HWND(window.hwnd() as _);
+            // 从 winit 0.29 获取 HWND（使用 raw_window_handle）
+            let window_handle = window.window_handle().expect("Failed to get window handle");
+            let hwnd = match window_handle.as_raw() {
+                RawWindowHandle::Win32(win32_handle) => {
+                    windows::Win32::Foundation::HWND(win32_handle.hwnd.get() as *mut core::ffi::c_void)
+                }
+                _ => panic!("Expected Win32 window handle on Windows platform"),
+            };
             let swap_chain_desc = DXGI_SWAP_CHAIN_DESC1 {
                 Width: width,
                 Height: height,

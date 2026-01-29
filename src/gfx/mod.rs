@@ -16,4 +16,3 @@ pub mod wgpu;
 pub use backend::GraphicsBackend;
 pub use vulkan::VulkanBackend;
 pub use dx12::Dx12Backend;
-pub use wgpu::WgpuBackend;

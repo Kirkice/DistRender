@@ -4,7 +4,8 @@
 //! similar to the DistEngine C++ InputSystem.
 
 use std::collections::HashSet;
-use winit::event::{VirtualKeyCode, ElementState, MouseButton};
+use winit::event::{ElementState, MouseButton};
+use winit::keyboard::KeyCode;
 use winit::window::Window;
 use tracing::{debug, warn};
 use crate::component::Camera;
@@ -31,7 +32,7 @@ impl Default for InputConfig {
 /// and translates them into camera movements
 pub struct InputSystem {
     // Keyboard state
-    pressed_keys: HashSet<VirtualKeyCode>,
+    pressed_keys: HashSet<KeyCode>,
 
     // Mouse state
     last_mouse_pos: (f64, f64),
@@ -73,7 +74,7 @@ impl InputSystem {
     /// Returns true if the event was handled
     pub fn on_keyboard_input(
         &mut self,
-        keycode: VirtualKeyCode,
+        keycode: KeyCode,
         state: ElementState,
     ) -> bool {
         match state {
@@ -147,16 +148,16 @@ impl InputSystem {
     fn handle_keyboard_movement(&self, camera: &mut Camera, delta_time: f32) {
         let distance = self.move_speed * delta_time;
 
-        if self.pressed_keys.contains(&VirtualKeyCode::W) {
+        if self.pressed_keys.contains(&KeyCode::KeyW) {
             camera.walk(-distance);
         }
-        if self.pressed_keys.contains(&VirtualKeyCode::S) {
+        if self.pressed_keys.contains(&KeyCode::KeyS) {
             camera.walk(distance);
         }
-        if self.pressed_keys.contains(&VirtualKeyCode::A) {
+        if self.pressed_keys.contains(&KeyCode::KeyA) {
             camera.strafe(-distance);
         }
-        if self.pressed_keys.contains(&VirtualKeyCode::D) {
+        if self.pressed_keys.contains(&KeyCode::KeyD) {
             camera.strafe(distance);
         }
     }
@@ -238,7 +239,7 @@ impl InputSystem {
     }
 
     /// Check if a specific key is currently pressed
-    pub fn is_key_pressed(&self, key: VirtualKeyCode) -> bool {
+    pub fn is_key_pressed(&self, key: KeyCode) -> bool {
         self.pressed_keys.contains(&key)
     }
 

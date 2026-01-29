@@ -185,7 +185,7 @@ impl VulkanDescriptorManager {
     ///
     /// 返回新创建的描述符管理器
     pub fn new(device: Arc<Device>) -> Self {
-        let allocator = StandardDescriptorSetAllocator::new(device.clone());
+        let allocator = StandardDescriptorSetAllocator::new(device.clone(), Default::default());
 
         Self {
             device,
@@ -253,6 +253,7 @@ impl VulkanDescriptorManager {
             &self.allocator,
             layout.layout().clone(),
             writes,
+            []
         )
         .map_err(|e| {
             DistRenderError::Graphics(GraphicsError::ResourceCreation(format!(

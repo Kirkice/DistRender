@@ -22,12 +22,11 @@ use vulkano::command_buffer::allocator::{
 };
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::device::physical::PhysicalDeviceType;
-use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo};
-use vulkano::instance::{Instance, InstanceCreateInfo};
+use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
+use vulkano::instance::{Instance, InstanceCreateInfo, InstanceExtensions};
 use vulkano::memory::allocator::StandardMemoryAllocator;
 use vulkano::swapchain::Surface;
 use vulkano::VulkanLibrary;
-use vulkano_win::VkSurfaceBuild;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 use winit::dpi::LogicalSize;
@@ -58,6 +57,8 @@ pub struct VulkanBackend {
     pub queue: Arc<Queue>,
     /// 窗口表面
     pub surface: Arc<Surface>,
+    /// 窗口引用
+    window: Arc<Window>,
     /// 内存分配器
     pub memory_allocator: Arc<StandardMemoryAllocator>,
     /// 命令缓冲分配器
@@ -99,14 +100,19 @@ impl VulkanBackend {
     pub fn new(event_loop: &EventLoop<()>, config: &Config) -> Self {
         // 1. 加载 Vulkan 库
         let library = VulkanLibrary::new().expect("Failed to load Vulkan library");
-        let required_extensions = vulkano_win::required_extensions(&library);
 
-        // 2. 创建 Vulkan 实例
+        // 2. 创建 Vulkan 实例（vulkano_win 会自动处理所需的表面扩展）
         let instance = Instance::new(
             library,
             InstanceCreateInfo {
-                enumerate_portability: true,
-                enabled_extensions: required_extensions,
+                enabled_extensions: InstanceExtensions {
+                    khr_surface: true,
+                    khr_win32_surface: cfg!(target_os = "windows"),
+                    khr_xlib_surface: cfg!(target_os = "linux"),
+                    khr_wayland_surface: cfg!(target_os = "linux"),
+                    mvk_macos_surface: cfg!(target_os = "macos"),
+                    ..InstanceExtensions::empty()
+                },
                 ..Default::default()
             },
         )
@@ -115,18 +121,66 @@ impl VulkanBackend {
         #[cfg(debug_assertions)]
         debug!("Vulkan instance created");
 
-        // 3. 创建窗口表面（使用配置中的窗口参数）
-        let surface = WindowBuilder::new()
-            .with_title(&config.window.title)
-            .with_inner_size(LogicalSize::new(config.window.width, config.window.height))
-            .with_resizable(config.window.resizable)
-            .build_vk_surface(event_loop, instance.clone())
-            .expect("Failed to create window surface");
+        // 3. 创建窗口和表面（使用配置中的窗口参数）
+        let window = Arc::new(
+            WindowBuilder::new()
+                .with_title(&config.window.title)
+                .with_inner_size(LogicalSize::new(config.window.width, config.window.height))
+                .with_resizable(config.window.resizable)
+                .build(event_loop)
+                .expect("Failed to create window")
+        );
+
+        // 手动创建表面以处理 raw-window-handle 版本不匹配
+        // winit 0.29 使用 raw-window-handle 0.6，vulkano 0.34 使用 0.5
+        let surface = Arc::new(unsafe {
+            use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+            
+            
+            // 获取 winit 0.29 的 window handle (raw-window-handle 0.6)
+            let window_handle = window.as_ref().window_handle().expect("Failed to get window handle");
+            
+            // 提取 HWND (Windows) 或其他平台的句柄
+            #[cfg(target_os = "windows")]
+            let (hwnd, _hinstance) = {
+                if let RawWindowHandle::Win32(win32_handle) = window_handle.as_raw() {
+                    (win32_handle.hwnd.get() as *const std::ffi::c_void,
+                     win32_handle.hinstance.map(|h| h.get() as *const std::ffi::c_void))
+                } else {
+                    panic!("Expected Win32 window handle on Windows");
+                }
+            };
+            
+            // 手动创建 VkWin32SurfaceKHR
+            let ash_entry = ash::Entry::load().expect("Failed to load Vulkan entry");
+            let ash_instance = ash::Instance::load(
+                ash_entry.static_fn(), 
+                vulkano::VulkanObject::handle(&*instance)
+            );
+            
+            use ash::vk;
+            let win32_surface_loader = ash::extensions::khr::Win32Surface::new(&ash_entry, &ash_instance);
+            let surface_create_info = vk::Win32SurfaceCreateInfoKHR::builder()
+                .hwnd(hwnd)
+                .build();
+            
+            let vk_surface = win32_surface_loader
+                .create_win32_surface(&surface_create_info, None)
+                .expect("Failed to create Win32 surface");
+            
+            // 将 ash 的 SurfaceKHR 包装为 vulkano Surface  
+            Surface::from_handle(
+                instance.clone(),
+                vk_surface,
+                vulkano::swapchain::SurfaceApi::Win32,
+                None,
+            )
+        });
 
         #[cfg(debug_assertions)]
         debug!("Vulkan surface created");
-
-        // 4. 配置设备扩展（启用交换链支持）
+        #[cfg(debug_assertions)]
+        debug!("Vulkan surface created");
         let device_extensions = DeviceExtensions {
             khr_swapchain: true,
             ..DeviceExtensions::empty()
@@ -143,7 +197,7 @@ impl VulkanBackend {
                     .iter()
                     .enumerate()
                     .position(|(i, q)| {
-                        q.queue_flags.graphics
+                        q.queue_flags.intersects(QueueFlags::GRAPHICS)
                             && p.surface_support(i as u32, &surface).unwrap_or(false)
                     })
                     .map(|i| (p, i as u32))
@@ -199,7 +253,7 @@ impl VulkanBackend {
             device.clone(),
             StandardCommandBufferAllocatorCreateInfo::default(),
         );
-        let descriptor_allocator = StandardDescriptorSetAllocator::new(device.clone());
+        let descriptor_allocator = StandardDescriptorSetAllocator::new(device.clone(), Default::default());
 
         #[cfg(debug_assertions)]
         {
@@ -214,6 +268,7 @@ impl VulkanBackend {
             device,
             queue,
             surface,
+            window,
             memory_allocator,
             command_buffer_allocator,
             descriptor_allocator,
@@ -227,11 +282,7 @@ impl GraphicsBackend for VulkanBackend {
     }
 
     fn window(&self) -> &Window {
-        self.surface
-            .object()
-            .unwrap()
-            .downcast_ref::<Window>()
-            .unwrap()
+        &self.window
     }
 
     fn backend_name(&self) -> &str {

@@ -36,8 +36,9 @@ impl GuiManager {
         // 创建 egui context
         let context = egui::Context::default();
 
-        // 创建 egui-winit state
-        let state = EguiState::new(window);
+        // 创建 egui-winit state (egui 0.26 API)
+        let viewport_id = context.viewport_id();
+        let state = EguiState::new(context.clone(), viewport_id, window, None, None);
 
         // 创建 egui-wgpu renderer
         let renderer = EguiRenderer::new(device, surface_format, None, 1);
@@ -55,8 +56,8 @@ impl GuiManager {
 
     /// 处理输入事件
     /// 返回 true 如果事件被 GUI 消费
-    pub fn handle_event(&mut self, event: &winit::event::WindowEvent) -> bool {
-        let response = self.state.on_event(&self.context, event);
+    pub fn handle_event(&mut self, window: &Window, event: &winit::event::WindowEvent) -> bool {
+        let response = self.state.on_window_event(window, event);
         response.consumed
     }
 
@@ -110,11 +111,12 @@ impl GuiManager {
         let full_output = self.context.end_frame();
 
         // 处理平台输出（光标、复制粘贴等）
-        self.state.handle_platform_output(window, &self.context, full_output.platform_output);
+        self.state.handle_platform_output(window, full_output.platform_output);
 
         // 更新纹理和缓冲
-        let paint_jobs = self.context.tessellate(full_output.shapes);
-        let screen_descriptor = egui_wgpu::renderer::ScreenDescriptor {
+        let pixels_per_point = window.scale_factor() as f32;
+        let paint_jobs = self.context.tessellate(full_output.shapes, pixels_per_point);
+        let screen_descriptor = egui_wgpu::ScreenDescriptor {
             size_in_pixels: [window.inner_size().width, window.inner_size().height],
             pixels_per_point: window.scale_factor() as f32,
         };
@@ -134,10 +136,12 @@ impl GuiManager {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,  // 保留场景渲染结果
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
 
             self.renderer.render(&mut render_pass, &paint_jobs, &screen_descriptor);

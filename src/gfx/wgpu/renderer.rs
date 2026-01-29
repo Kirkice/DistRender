@@ -418,17 +418,19 @@ impl Renderer {
                             b: self.scene.clear_color[2] as f64,
                             a: self.scene.clear_color[3] as f64,
                         }),
-                        store: true,  // wgpu 0.17: store 是布尔值
+                        store: wgpu::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.depth_view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
-                        store: true,  // wgpu 0.17: store 是布尔值
+                        store: wgpu::StoreOp::Store,
                     }),
                     stencil_ops: None,
                 }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
@@ -520,7 +522,7 @@ impl Renderer {
         ).normalize();
 
         // 更新相机
-        if (self.camera.fov() - state.camera_fov * PI / 180.0).abs() > 0.01 {
+        if (self.camera.fov_x() - state.camera_fov * PI / 180.0).abs() > 0.01 {
             self.camera.set_lens(
                 state.camera_fov * PI / 180.0,
                 self.camera.aspect(),
@@ -533,7 +535,7 @@ impl Renderer {
     /// 处理 GUI 事件
     /// 返回 true 如果事件被 GUI 消费
     pub fn handle_gui_event(&mut self, event: &winit::event::WindowEvent) -> bool {
-        self.gui_manager.handle_event(event)
+        self.gui_manager.handle_event(self.gfx.window(), event)
     }
 
     /// 获取窗口引用

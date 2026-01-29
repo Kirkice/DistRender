@@ -47,13 +47,14 @@ mod geometry;
 mod component;
 mod renderer;
 mod gfx;
+mod gui;
 
 use core::{Config, SceneConfig, log};
 use core::input::InputSystem;
 use tracing::{info, error, debug};
 use renderer::Renderer;
 use winit::event::{Event, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event_loop::EventLoop;
 use std::time::Instant;
 
 /// 应用程序入口点
@@ -126,7 +127,7 @@ fn main() {
     );
 
     // 7. 创建事件循环
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoop::new().expect("Failed to create event loop");
 
     // 8. 创建渲染器（传递配置和场景）
     let mut renderer = match Renderer::new(&event_loop, &config, &scene) {
@@ -152,7 +153,10 @@ fn main() {
     info!("Entering main loop...");
 
     // 11. 启动事件循环
-    event_loop.run(move |event, _, control_flow| {
+    let _ = event_loop.run(move |event, elwt| {
+        // 设置为 Poll 模式以实现连续渲染（避免卡顿）
+        elwt.set_control_flow(winit::event_loop::ControlFlow::Poll);
+
         match event {
             // 窗口关闭事件
             Event::WindowEvent {
@@ -160,7 +164,7 @@ fn main() {
                 ..
             } => {
                 info!("Close requested, shutting down...");
-                *control_flow = ControlFlow::Exit;
+                elwt.exit();
             }
             // 窗口大小调整事件
             Event::WindowEvent {
@@ -177,16 +181,14 @@ fn main() {
             // 键盘输入事件
             Event::WindowEvent {
                 event: WindowEvent::KeyboardInput {
-                    input: winit::event::KeyboardInput {
-                        virtual_keycode: Some(keycode),
-                        state,
-                        ..
-                    },
+                    event: key_event,
                     ..
                 },
                 ..
             } => {
-                input_system.on_keyboard_input(keycode, state);
+                if let winit::keyboard::PhysicalKey::Code(keycode) = key_event.physical_key {
+                    input_system.on_keyboard_input(keycode, key_event.state);
+                }
             }
             // 鼠标按钮事件
             Event::WindowEvent {
@@ -214,7 +216,15 @@ fn main() {
                 debug!("Window focus lost, cursor unlocked and input reset");
             }
             // 准备绘制下一帧
-            Event::RedrawEventsCleared => {
+            Event::AboutToWait => {
+                // 请求窗口重绘以实现连续渲染
+                renderer.window().request_redraw();
+            }
+            // 窗口重绘请求
+            Event::WindowEvent {
+                event: WindowEvent::RedrawRequested,
+                ..
+            } => {
                 // 计算 delta time
                 let now = Instant::now();
                 let delta_time = now.duration_since(last_frame).as_secs_f32();
@@ -227,7 +237,7 @@ fn main() {
                 if let Err(e) = renderer.draw() {
                     error!("Draw failed: {}", e);
                     eprintln!("Draw failed: {}", e);
-                    *control_flow = ControlFlow::Exit;
+                    elwt.exit();
                 }
             }
             // 忽略其他事件

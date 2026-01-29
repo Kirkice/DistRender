@@ -24,7 +24,7 @@ pub struct WgpuBackend {
     /// wgpu 实例（入口点）
     pub instance: wgpu::Instance,
     /// 窗口表面
-    pub surface: wgpu::Surface,
+    pub surface: wgpu::Surface<'static>,
     /// 图形适配器（GPU）
     pub adapter: wgpu::Adapter,
     /// 逻辑设备
@@ -56,6 +56,8 @@ impl WgpuBackend {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),  // 支持所有后端（Vulkan, Metal, DX12, OpenGL）
             dx12_shader_compiler: Default::default(),
+            flags: wgpu::InstanceFlags::default(),
+            gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
         });
 
         // 2. 创建窗口
@@ -72,9 +74,9 @@ impl WgpuBackend {
 
         let window = Arc::new(window);
 
-        // 3. 创建表面（wgpu 0.17 API）
+        // 3. 创建表面（wgpu 0.19 API）
         debug!("Creating surface");
-        let surface = unsafe { instance.create_surface(&*window) }
+        let surface = instance.create_surface(window.clone())
             .map_err(|e| GraphicsError::DeviceCreation(format!("Failed to create surface: {}", e)))?;
 
         // 4. 请求适配器（选择 GPU）
@@ -93,8 +95,8 @@ impl WgpuBackend {
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("Main Device"),
-                features: wgpu::Features::empty(),
-                limits: wgpu::Limits::default(),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
             },
             None,  // 不跟踪 API 调用
         ))
@@ -126,6 +128,7 @@ impl WgpuBackend {
             present_mode,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
+            desired_maximum_frame_latency: 2,
         };
 
         surface.configure(&device, &surface_config);

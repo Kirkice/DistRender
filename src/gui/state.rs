@@ -43,7 +43,7 @@ impl GuiState {
 
             clear_color: scene.clear_color,
             light_intensity: scene.light.intensity,
-            light_direction: scene.light.direction,
+            light_direction: scene.light.transform.rotation,
 
             model_position: scene.model.transform.position,
             model_rotation: scene.model.transform.rotation,

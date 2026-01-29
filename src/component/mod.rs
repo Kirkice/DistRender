@@ -12,5 +12,4 @@ mod light;
 pub use component::Component;
 pub use transform::Transform;
 pub use camera::Camera;
-pub use game_object::GameObject;
-pub use light::{Light, LightType, Color, DirectionalLight, PointLight, SpotLight};
+pub use light::{Color, DirectionalLight};

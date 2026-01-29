@@ -12,4 +12,3 @@ pub mod descriptor;
 // 重新导出常用类型
 pub use backend::Dx12Backend;
 pub use renderer::Renderer;
-pub use descriptor::Dx12DescriptorManager;

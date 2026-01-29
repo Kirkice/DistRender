@@ -9,4 +9,3 @@ mod panels;
 
 pub use manager::GuiManager;
 pub use state::GuiState;
-pub use metrics::PerformanceMetrics;

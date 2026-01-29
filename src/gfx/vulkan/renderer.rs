@@ -1,26 +1,28 @@
 use std::sync::Arc;
 use tracing::{trace, debug, info, warn, error};
-use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, CpuBufferPool, TypedBufferAccess};
+use vulkano::buffer::{Buffer, BufferUsage, BufferCreateInfo, Subbuffer};
 use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo, SubpassContents,
+    AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo, SubpassBeginInfo, SubpassEndInfo,
 };
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::image::view::ImageView;
-use vulkano::image::{ImageAccess, ImageUsage, SwapchainImage, AttachmentImage};
+use vulkano::image::{Image, ImageUsage};
 use vulkano::format::Format;
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
-use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
+use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexInputState, VertexInputBindingDescription, VertexInputAttributeDescription};
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::graphics::rasterization::{RasterizationState, CullMode, FrontFace};
-use vulkano::pipeline::StateMode;
-use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
-use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
+use vulkano::pipeline::graphics::depth_stencil::{DepthStencilState, DepthState};
+use vulkano::pipeline::graphics::color_blend::{ColorBlendState, ColorBlendAttachmentState};
+use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint, PipelineLayout, PipelineShaderStageCreateInfo};
+use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
 use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
 use vulkano::swapchain::{
-    acquire_next_image, AcquireError, PresentMode, Swapchain, SwapchainCreateInfo, SwapchainCreationError,
+    acquire_next_image, PresentMode, Swapchain, SwapchainCreateInfo,
     SwapchainPresentInfo,
 };
-use vulkano::sync::{self, FlushError, GpuFuture};
+use vulkano::sync::{self, GpuFuture};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
 use winit::event_loop::EventLoop;
 use winit::window::Window;
 use bytemuck::{Pod, Zeroable};
@@ -73,12 +75,12 @@ pub struct Renderer {
     render_pass: Arc<RenderPass>,
     pipeline: Arc<GraphicsPipeline>,
     framebuffers: Vec<Arc<Framebuffer>>,
-    vertex_buffer: Arc<CpuAccessibleBuffer<[MyVertex]>>,
-    index_buffer: Arc<CpuAccessibleBuffer<[u32]>>,
+    vertex_buffer: Subbuffer<[MyVertex]>,
+    index_buffer: Subbuffer<[u32]>,
     viewport: Viewport,
     recreate_swapchain: bool,
     previous_frame_end: Option<Box<dyn GpuFuture>>,
-    depth_image: Arc<AttachmentImage>,
+    depth_image: Arc<Image>,
 
     // 新增：帧资源管理
     frame_resource_pool: FrameResourcePool,
@@ -86,8 +88,6 @@ pub struct Renderer {
     fence_manager: FenceManager,
     // 新增：描述符管理
     descriptor_manager: VulkanDescriptorManager,
-    // 新增：Uniform buffer pool
-    uniform_buffer_pool: CpuBufferPool<UniformBufferObject>,
     // 新增：场景配置
     scene: SceneConfig,
     // 新增：相机组件
@@ -125,7 +125,7 @@ impl Renderer {
 
             let composite_alpha = surface_capabilities
                 .supported_composite_alpha
-                .iter()
+                .into_iter()
                 .next()
                 .ok_or_else(|| DistRenderError::Graphics(
                     GraphicsError::SwapchainError("No supported composite alpha modes".to_string())
@@ -136,12 +136,9 @@ impl Renderer {
                 gfx.surface.clone(),
                 SwapchainCreateInfo {
                     min_image_count: surface_capabilities.min_image_count.max(2),
-                    image_format: Some(image_format),
+                    image_format,
                     image_extent: window.inner_size().into(),
-                    image_usage: ImageUsage {
-                        color_attachment: true,
-                        ..ImageUsage::empty()
-                    },
+                    image_usage: ImageUsage::COLOR_ATTACHMENT,
                     composite_alpha,
                     // 使用 Mailbox 模式实现三重缓冲，提供流畅的渲染
                     // 如果不支持则回退到 Immediate（无垂直同步）
@@ -192,26 +189,32 @@ impl Renderer {
             (create_default_triangle().to_vec(), vec![0, 1, 2])
         };
 
-        let vertex_buffer = CpuAccessibleBuffer::from_iter(
-            &gfx.memory_allocator,
-            BufferUsage {
-                vertex_buffer: true,
-                ..BufferUsage::empty()
+        let vertex_buffer = Buffer::from_iter(
+            gfx.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::VERTEX_BUFFER,
+                ..Default::default()
             },
-            false,
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
             vertices.into_iter(),
         )
         .map_err(|e| DistRenderError::Graphics(
             GraphicsError::ResourceCreation(format!("Failed to create vertex buffer: {:?}", e))
         ))?;
 
-        let index_buffer = CpuAccessibleBuffer::from_iter(
-            &gfx.memory_allocator,
-            BufferUsage {
-                index_buffer: true,
-                ..BufferUsage::empty()
+        let index_buffer = Buffer::from_iter(
+            gfx.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::INDEX_BUFFER,
+                ..Default::default()
             },
-            false,
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
             indices.into_iter(),
         )
         .map_err(|e| DistRenderError::Graphics(
@@ -236,16 +239,16 @@ impl Renderer {
             gfx.device.clone(),
             attachments: {
                 color: {
-                    load: Clear,
-                    store: Store,
                     format: swapchain.image_format(),
                     samples: 1,
+                    load_op: Clear,
+                    store_op: Store,
                 },
                 depth: {
-                    load: Clear,
-                    store: DontCare,
                     format: Format::D32_SFLOAT,
                     samples: 1,
+                    load_op: Clear,
+                    store_op: DontCare,
                 }
             },
             pass: {
@@ -261,12 +264,6 @@ impl Renderer {
         debug!("Render pass created");
 
         let pipeline = {
-            let subpass = Subpass::from(render_pass.clone(), 0)
-                .ok_or_else(|| DistRenderError::Graphics(
-                    GraphicsError::ResourceCreation("Failed to create subpass".to_string())
-                ))?;
-
-            // GLSL shader 使用 "main" 作为入口点
             let vs_entry = vs.entry_point("main")
                 .ok_or_else(|| DistRenderError::Graphics(
                     GraphicsError::ShaderCompilation("Vertex shader 'main' entry point not found".to_string())
@@ -277,46 +274,100 @@ impl Renderer {
                     GraphicsError::ShaderCompilation("Fragment shader 'main' entry point not found".to_string())
                 ))?;
 
-            GraphicsPipeline::start()
-                .vertex_input_state(BuffersDefinition::new().vertex::<MyVertex>())
-                .vertex_shader(vs_entry, ())
-                .input_assembly_state(InputAssemblyState::new())
-                .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
-                .rasterization_state(RasterizationState {
-                    cull_mode: StateMode::Fixed(CullMode::Back),
-                    // 由于投影矩阵翻转了 Y 轴，三角形绕序也会反转
-                    // DX12 默认顺时针为正面，所以这里也设置为顺时针
-                    front_face: StateMode::Fixed(FrontFace::Clockwise),
-                    ..Default::default()
-                })
-                .depth_stencil_state(DepthStencilState::simple_depth_test())
-                .fragment_shader(fs_entry, ())
-                .render_pass(subpass)
-                .build(gfx.device.clone())
-                .map_err(|e| DistRenderError::Graphics(
-                    GraphicsError::ResourceCreation(format!("Failed to create graphics pipeline: {:?}", e))
-                ))?
+            let stages = [
+                PipelineShaderStageCreateInfo::new(vs_entry),
+                PipelineShaderStageCreateInfo::new(fs_entry),
+            ];
+
+            let layout = PipelineLayout::new(
+                gfx.device.clone(),
+                PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
+                    .into_pipeline_layout_create_info(gfx.device.clone())
+                    .map_err(|e| DistRenderError::Graphics(
+                        GraphicsError::ResourceCreation(format!("Failed to create pipeline layout info: {:?}", e))
+                    ))?,
+            )
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::ResourceCreation(format!("Failed to create pipeline layout: {:?}", e))
+            ))?;
+
+            let subpass = Subpass::from(render_pass.clone(), 0)
+                .ok_or_else(|| DistRenderError::Graphics(
+                    GraphicsError::ResourceCreation("Failed to create subpass".to_string())
+                ))?;
+
+            GraphicsPipeline::new(
+                gfx.device.clone(),
+                None,
+                vulkano::pipeline::graphics::GraphicsPipelineCreateInfo {
+                    stages: stages.into_iter().collect(),
+                    vertex_input_state: Some({
+                        let desc = MyVertex::per_vertex();
+                        let binding_desc = VertexInputBindingDescription {
+                            stride: desc.stride,
+                            input_rate: desc.input_rate,
+                        };
+                        let attr_descs: Vec<(u32, VertexInputAttributeDescription)> = desc.members.iter().enumerate().map(|(location, (_name, member))| {
+                            (location as u32, VertexInputAttributeDescription {
+                                binding: 0,
+                                format: member.format,
+                                offset: member.offset as u32,
+                            })
+                        }).collect();
+                        
+                        let mut state = VertexInputState::new().binding(0, binding_desc);
+                        for (location, attr) in attr_descs {
+                            state = state.attribute(location, attr);
+                        }
+                        state
+                    }),
+                    input_assembly_state: Some(InputAssemblyState::default()),
+                    viewport_state: Some(ViewportState::default()),
+                    rasterization_state: Some(RasterizationState {
+                        cull_mode: CullMode::Back,
+                        front_face: FrontFace::Clockwise,
+                        ..Default::default()
+                    }),
+                    depth_stencil_state: Some(DepthStencilState {
+                        depth: Some(DepthState::simple()),
+                        ..Default::default()
+                    }),
+                    multisample_state: Some(Default::default()),
+                    color_blend_state: Some(ColorBlendState::with_attachment_states(
+                        1,  // 渲染通道中有 1 个 color attachment
+                        ColorBlendAttachmentState::default(),
+                    )),
+                    dynamic_state: [vulkano::pipeline::DynamicState::Viewport].into_iter().collect(),
+                    subpass: Some(subpass.into()),
+                    ..vulkano::pipeline::graphics::GraphicsPipelineCreateInfo::layout(layout)
+                },
+            )
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::ResourceCreation(format!("Failed to create graphics pipeline: {:?}", e))
+            ))?
         };
 
         #[cfg(debug_assertions)]
         debug!("Graphics pipeline created");
 
         let mut viewport = Viewport {
-            origin: [0.0, 0.0],
-            dimensions: [0.0, 0.0],
-            depth_range: 0.0..1.0,
+            offset: [0.0, 0.0],
+            extent: [0.0, 0.0],
+            depth_range: 0.0..=1.0,
         };
 
         // 创建深度图像
-        let dimensions = images[0].dimensions().width_height();
-        let depth_image = AttachmentImage::with_usage(
-            &gfx.memory_allocator,
-            dimensions,
-            Format::D32_SFLOAT,
-            ImageUsage {
-                depth_stencil_attachment: true,
-                ..ImageUsage::empty()
+        let dimensions = images[0].extent();
+        let depth_image = Image::new(
+            gfx.memory_allocator.clone(),
+            vulkano::image::ImageCreateInfo {
+                image_type: vulkano::image::ImageType::Dim2d,
+                format: Format::D32_SFLOAT,
+                extent: [dimensions[0], dimensions[1], 1],
+                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+                ..Default::default()
             },
+            AllocationCreateInfo::default(),
         )
         .map_err(|e| DistRenderError::Graphics(
             GraphicsError::ResourceCreation(format!("Failed to create depth image: {:?}", e))
@@ -335,14 +386,10 @@ impl Renderer {
         // 初始化描述符管理器
         let descriptor_manager = VulkanDescriptorManager::new(gfx.device.clone());
 
-        // 初始化 Uniform Buffer Pool
-        let uniform_buffer_pool = CpuBufferPool::uniform_buffer(gfx.memory_allocator.clone());
-
         #[cfg(debug_assertions)]
         {
             info!("Vulkan Renderer initialized successfully with triple buffering");
             debug!("Descriptor manager initialized");
-            info!("Uniform buffer pool created");
         }
 
         // 创建相机组件（从场景配置初始化）
@@ -352,7 +399,7 @@ impl Renderer {
             scene.camera.transform.position[1],
             scene.camera.transform.position[2],
         ));
-        let aspect_ratio = viewport.dimensions[0] / viewport.dimensions[1];
+        let aspect_ratio = viewport.extent[0] / viewport.extent[1];
         camera.set_lens(
             scene.camera.fov * PI / 180.0,
             aspect_ratio,
@@ -397,7 +444,6 @@ impl Renderer {
             frame_resource_pool,
             fence_manager,
             descriptor_manager,
-            uniform_buffer_pool,
             scene: scene.clone(),
             camera,
             directional_light,
@@ -462,17 +508,21 @@ impl Renderer {
             #[cfg(debug_assertions)]
             debug!("Recreating swapchain...");
 
-            let (new_swapchain, new_images) = match self.swapchain.recreate(SwapchainCreateInfo {
+            let result = self.swapchain.recreate(SwapchainCreateInfo {
                 image_extent: dimensions.into(),
                 ..self.swapchain.create_info()
-            }) {
+            });
+
+            let (new_swapchain, new_images) = match result {
                 Ok(r) => r,
-                Err(SwapchainCreationError::ImageExtentNotSupported { .. }) => {
-                    #[cfg(debug_assertions)]
-                    warn!("Swapchain recreation skipped: extent not supported");
-                    return Ok(());
-                }
                 Err(e) => {
+                    // Check if it's an ImageExtentNotSupported error
+                    let err_string = format!("{:?}", e);
+                    if err_string.contains("ImageExtentNotSupported") {
+                        #[cfg(debug_assertions)]
+                        warn!("Swapchain recreation skipped: extent not supported");
+                        return Ok(());
+                    }
                     error!("Failed to recreate swapchain: {:?}", e);
                     return Err(DistRenderError::Graphics(
                         GraphicsError::SwapchainError(format!("Failed to recreate swapchain: {:?}", e))
@@ -491,15 +541,17 @@ impl Renderer {
             self.swapchain = new_swapchain;
 
             // 重新创建深度图像
-            let new_dimensions = new_images[0].dimensions().width_height();
-            self.depth_image = AttachmentImage::with_usage(
-                &self.gfx.memory_allocator,
-                new_dimensions,
-                Format::D32_SFLOAT,
-                ImageUsage {
-                    depth_stencil_attachment: true,
-                    ..ImageUsage::empty()
+            let new_dimensions = new_images[0].extent();
+            self.depth_image = Image::new(
+                self.gfx.memory_allocator.clone(),
+                vulkano::image::ImageCreateInfo {
+                    image_type: vulkano::image::ImageType::Dim2d,
+                    format: Format::D32_SFLOAT,
+                    extent: [new_dimensions[0], new_dimensions[1], 1],
+                    usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+                    ..Default::default()
                 },
+                AllocationCreateInfo::default(),
             )
             .map_err(|e| DistRenderError::Graphics(
                 GraphicsError::ResourceCreation(format!("Failed to create depth image: {:?}", e))
@@ -517,20 +569,24 @@ impl Renderer {
             debug!("Framebuffers rebuilt");
         }
 
+        let acquire_result = acquire_next_image(self.swapchain.clone(), None);
+
         let (image_index, suboptimal, acquire_future) =
-            match acquire_next_image(self.swapchain.clone(), None) {
+            match acquire_result {
                 Ok(r) => {
                     #[cfg(debug_assertions)]
                     trace!(image_index = %r.0, "Acquired swapchain image");
                     r
                 }
-                Err(AcquireError::OutOfDate) => {
-                    #[cfg(debug_assertions)]
-                    warn!("Swapchain out of date, will recreate");
-                    self.recreate_swapchain = true;
-                    return Ok(());
-                }
                 Err(e) => {
+                    // Check if it's an OutOfDate error
+                    let err_string = format!("{:?}", e);
+                    if err_string.contains("OutOfDate") {
+                        #[cfg(debug_assertions)]
+                        warn!("Swapchain out of date, will recreate");
+                        self.recreate_swapchain = true;
+                        return Ok(());
+                    }
                     error!("Failed to acquire next image: {:?}", e);
                     return Err(DistRenderError::Graphics(
                         GraphicsError::CommandExecution(format!("Failed to acquire next image: {:?}", e))
@@ -548,7 +604,7 @@ impl Renderer {
         trace!(image_index, "Building command buffer");
 
         // 更新相机的宽高比（如果窗口大小改变）
-        let aspect_ratio = self.viewport.dimensions[0] / self.viewport.dimensions[1];
+        let aspect_ratio = self.viewport.extent[0] / self.viewport.extent[1];
         self.camera.set_aspect(aspect_ratio);
 
         // 计算 MVP 矩阵（使用 Camera 组件）
@@ -581,11 +637,21 @@ impl Renderer {
         );
 
         // 创建 uniform buffer
-        let uniform_subbuffer = self.uniform_buffer_pool
-            .from_data(ubo)
-            .map_err(|e| DistRenderError::Graphics(
-                GraphicsError::ResourceCreation(format!("Failed to create uniform buffer: {:?}", e))
-            ))?;
+        let uniform_subbuffer = Buffer::from_data(
+            self.gfx.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::UNIFORM_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
+            ubo,
+        )
+        .map_err(|e| DistRenderError::Graphics(
+            GraphicsError::ResourceCreation(format!("Failed to create uniform buffer: {:?}", e))
+        ))?;
 
         // 创建描述符集
         let layout = self.pipeline.layout().set_layouts().get(0)
@@ -597,6 +663,7 @@ impl Renderer {
             &self.gfx.descriptor_allocator,
             layout.clone(),
             [WriteDescriptorSet::buffer(0, uniform_subbuffer)],
+            []
         )
         .map_err(|e| DistRenderError::Graphics(
             GraphicsError::ResourceCreation(format!("Failed to create descriptor set: {:?}", e))
@@ -622,26 +689,44 @@ impl Renderer {
                         self.framebuffers[image_index as usize].clone(),
                     )
                 },
-                SubpassContents::Inline,
+                SubpassBeginInfo {
+                    contents: vulkano::command_buffer::SubpassContents::Inline,
+                    ..Default::default()
+                },
             )
             .map_err(|e| DistRenderError::Graphics(
                 GraphicsError::CommandExecution(format!("Failed to begin render pass: {:?}", e))
             ))?
-            .set_viewport(0, [self.viewport.clone()].into_iter())
+            .set_viewport(0, [self.viewport.clone()].into_iter().collect())
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::CommandExecution(format!("Failed to set viewport: {:?}", e))
+            ))?
             .bind_pipeline_graphics(self.pipeline.clone())
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::CommandExecution(format!("Failed to bind pipeline: {:?}", e))
+            ))?
             .bind_descriptor_sets(
                 PipelineBindPoint::Graphics,
                 self.pipeline.layout().clone(),
                 0,
                 descriptor_set,
             )
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::CommandExecution(format!("Failed to bind descriptor sets: {:?}", e))
+            ))?
             .bind_vertex_buffers(0, self.vertex_buffer.clone())
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::CommandExecution(format!("Failed to bind vertex buffer: {:?}", e))
+            ))?
             .bind_index_buffer(self.index_buffer.clone())
+            .map_err(|e| DistRenderError::Graphics(
+                GraphicsError::CommandExecution(format!("Failed to bind index buffer: {:?}", e))
+            ))?
             .draw_indexed(self.index_buffer.len() as u32, 1, 0, 0, 0)
             .map_err(|e| DistRenderError::Graphics(
                 GraphicsError::CommandExecution(format!("Failed to record draw command: {:?}", e))
             ))?
-            .end_render_pass()
+            .end_render_pass(SubpassEndInfo::default())
             .map_err(|e| DistRenderError::Graphics(
                 GraphicsError::CommandExecution(format!("Failed to end render pass: {:?}", e))
             ))?;
@@ -675,14 +760,16 @@ impl Renderer {
                 trace!("Frame presented successfully");
                 self.previous_frame_end = Some(future.boxed());
             }
-            Err(FlushError::OutOfDate) => {
-                #[cfg(debug_assertions)]
-                debug!("Flush error: swapchain out of date");
-                self.recreate_swapchain = true;
-                self.previous_frame_end = Some(sync::now(self.gfx.device.clone()).boxed());
-            }
             Err(e) => {
-                error!("Failed to flush future: {:?}", e);
+                // Check if it's an OutOfDate error
+                let err_string = format!("{:?}", e);
+                if err_string.contains("OutOfDate") {
+                    #[cfg(debug_assertions)]
+                    debug!("Flush error: swapchain out of date");
+                    self.recreate_swapchain = true;
+                } else {
+                    error!("Failed to flush future: {:?}", e);
+                }
                 self.previous_frame_end = Some(sync::now(self.gfx.device.clone()).boxed());
             }
         }
@@ -711,13 +798,13 @@ impl Renderer {
 }
 
 fn window_size_dependent_setup(
-    images: &[Arc<SwapchainImage>],
+    images: &[Arc<Image>],
     render_pass: Arc<RenderPass>,
-    depth_image: Arc<AttachmentImage>,
+    depth_image: Arc<Image>,
     viewport: &mut Viewport,
 ) -> Result<Vec<Arc<Framebuffer>>> {
-    let dimensions = images[0].dimensions().width_height();
-    viewport.dimensions = [dimensions[0] as f32, dimensions[1] as f32];
+    let dimensions = images[0].extent();
+    viewport.extent = [dimensions[0] as f32, dimensions[1] as f32];
 
     let depth_view = ImageView::new_default(depth_image)
         .map_err(|e| DistRenderError::Graphics(

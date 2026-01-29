@@ -14,4 +14,3 @@ pub mod shaders;
 // 重新导出常用类型
 pub use backend::VulkanBackend;
 pub use renderer::Renderer;
-pub use descriptor::VulkanDescriptorManager;
