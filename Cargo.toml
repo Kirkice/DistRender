@@ -40,3 +40,8 @@ tobj = "4.0"  # OBJ 文件加载（tinyobjloader Rust 移植）
 wgpu = "0.17"          # wgpu 核心库（与 winit 0.27 兼容）
 pollster = "0.3"       # 用于 wgpu 异步初始化的同步执行
 
+# GUI 系统
+egui = "0.26"          # egui 核心库
+egui-wgpu = "0.26"     # egui 的 wgpu 渲染后端
+egui-winit = "0.26"    # egui 的 winit 集成
+

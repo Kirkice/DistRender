@@ -20,6 +20,7 @@ use crate::geometry::loaders::{MeshLoader, ObjLoader};
 use crate::component::{Camera, DirectionalLight};
 use crate::core::input::InputSystem;
 use crate::core::math::Vector3;
+use crate::gui::{GuiManager, GuiState};
 use std::path::Path;
 use std::f32::consts::PI;
 
@@ -79,6 +80,9 @@ pub struct Renderer {
     // 通用管理器
     frame_resource_pool: FrameResourcePool,
     fence_manager: FenceManager,
+
+    // GUI 管理器
+    gui_manager: GuiManager,
 
     // 渲染状态
     num_indices: u32,
@@ -323,6 +327,17 @@ impl Renderer {
         let frame_resource_pool = FrameResourcePool::triple_buffering();
         let fence_manager = FenceManager::new();
 
+        // 15. 初始化 GUI
+        debug!("Initializing GUI");
+        let gui_state = GuiState::new(config, scene);
+        let gui_manager = GuiManager::new(
+            &gfx.device,
+            gfx.surface_config.format,
+            gfx.window(),
+            gui_state,
+        )?;
+        info!("GUI manager initialized");
+
         info!("wgpu renderer created successfully");
 
         Ok(Self {
@@ -339,6 +354,7 @@ impl Renderer {
             scene: scene.clone(),
             frame_resource_pool,
             fence_manager,
+            gui_manager,
             num_indices,
         })
     }
@@ -422,11 +438,24 @@ impl Renderer {
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
 
-        // 7. 提交命令
+        // 7. 更新和渲染 GUI
+        self.gui_manager.update(self.gfx.window());
+        self.gui_manager.render(
+            &self.gfx.device,
+            &self.gfx.queue,
+            &mut encoder,
+            &view,
+            self.gfx.window(),
+        )?;
+
+        // 8. 提交命令
         self.gfx.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
-        // 8. 更新帧资源状态
+        // 9. 应用 GUI 状态到场景
+        self.apply_gui_state();
+
+        // 10. 更新帧资源状态
         self.fence_manager.next_value();
         self.frame_resource_pool.current_mut().mark_in_use(self.fence_manager.current_value().value());
         self.frame_resource_pool.advance();
@@ -470,6 +499,41 @@ impl Renderer {
     /// 更新相机（基于输入系统）
     pub fn update(&mut self, input_system: &mut InputSystem, delta_time: f32) {
         input_system.update_camera(&mut self.camera, delta_time);
+    }
+
+    /// 应用 GUI 状态到场景
+    fn apply_gui_state(&mut self) {
+        let state = self.gui_manager.state();
+
+        // 更新场景配置
+        self.scene.clear_color = state.clear_color;
+        self.scene.model.transform.position = state.model_position;
+        self.scene.model.transform.rotation = state.model_rotation;
+        self.scene.model.transform.scale = state.model_scale;
+
+        // 更新光照
+        self.directional_light.intensity = state.light_intensity;
+        self.directional_light.direction = Vector3::new(
+            state.light_direction[0],
+            state.light_direction[1],
+            state.light_direction[2],
+        ).normalize();
+
+        // 更新相机
+        if (self.camera.fov() - state.camera_fov * PI / 180.0).abs() > 0.01 {
+            self.camera.set_lens(
+                state.camera_fov * PI / 180.0,
+                self.camera.aspect(),
+                state.camera_near,
+                state.camera_far,
+            );
+        }
+    }
+
+    /// 处理 GUI 事件
+    /// 返回 true 如果事件被 GUI 消费
+    pub fn handle_gui_event(&mut self, event: &winit::event::WindowEvent) -> bool {
+        self.gui_manager.handle_event(event)
     }
 
     /// 获取窗口引用
