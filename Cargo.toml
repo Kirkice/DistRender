@@ -36,3 +36,7 @@ anyhow = "1.0"
 tobj = "4.0"  # OBJ 文件加载（tinyobjloader Rust 移植）
 # russimp = "2.0"  # Assimp Rust 绑定（支持 FBX 等格式）- Phase 4 将添加
 
+# wgpu 后端依赖
+wgpu = "0.17"          # wgpu 核心库（与 winit 0.27 兼容）
+pollster = "0.3"       # 用于 wgpu 异步初始化的同步执行
+

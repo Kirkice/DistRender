@@ -28,6 +28,7 @@ use tracing::info;
 use winit::event_loop::EventLoop;
 use crate::gfx::vulkan::Renderer as VulkanRenderer;
 use crate::gfx::dx12::Renderer as Dx12Renderer;
+use crate::gfx::wgpu::Renderer as WgpuRenderer;
 use crate::core::Config;
 use crate::core::error::Result;
 
@@ -47,6 +48,8 @@ enum Backend {
     Vulkan(VulkanRenderer),
     /// DirectX 12 渲染器实例
     Dx12(Dx12Renderer),
+    /// wgpu 渲染器实例
+    Wgpu(WgpuRenderer),
 }
 
 /// 统一的渲染器接口
@@ -99,7 +102,11 @@ impl Renderer {
     /// let renderer = Renderer::new(&event_loop, &config);
     /// ```
     pub fn new(event_loop: &EventLoop<()>, config: &Config, scene: &crate::core::SceneConfig) -> Result<Self> {
-        let backend = if config.graphics.backend.is_dx12() {
+        let backend = if config.graphics.backend.is_wgpu() {
+            info!("Initializing wgpu Backend");
+            let renderer = WgpuRenderer::new(event_loop, config, scene)?;
+            Backend::Wgpu(renderer)
+        } else if config.graphics.backend.is_dx12() {
             info!("Initializing DX12 Backend");
             let renderer = Dx12Renderer::new(event_loop, config, scene)?;
             Backend::Dx12(renderer)
@@ -124,6 +131,7 @@ impl Renderer {
         match &mut self.backend {
             Backend::Vulkan(r) => r.resize(),
             Backend::Dx12(r) => r.resize(),
+            Backend::Wgpu(r) => r.resize(),
         }
     }
 
@@ -156,6 +164,7 @@ impl Renderer {
         match &mut self.backend {
             Backend::Vulkan(r) => r.draw(),
             Backend::Dx12(r) => r.draw(),
+            Backend::Wgpu(r) => r.draw(),
         }
     }
 
@@ -171,6 +180,7 @@ impl Renderer {
         match &mut self.backend {
             Backend::Vulkan(r) => r.update(input_system, delta_time),
             Backend::Dx12(r) => r.update(input_system, delta_time),
+            Backend::Wgpu(r) => r.update(input_system, delta_time),
         }
     }
 
@@ -185,6 +195,7 @@ impl Renderer {
         match &self.backend {
             Backend::Vulkan(r) => r.window(),
             Backend::Dx12(r) => r.window(),
+            Backend::Wgpu(r) => r.window(),
         }
     }
 }

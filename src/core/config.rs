@@ -87,6 +87,8 @@ pub enum GraphicsBackend {
     Vulkan,
     /// DirectX 12 后端
     Dx12,
+    /// wgpu 后端（支持 Vulkan、Metal、DX12、OpenGL）
+    Wgpu,
 }
 
 /// 日志配置
@@ -252,6 +254,11 @@ impl Config {
             self.graphics.backend = GraphicsBackend::Dx12;
         }
 
+        // 检查是否使用 wgpu
+        if args.iter().any(|a| a == "--wgpu") {
+            self.graphics.backend = GraphicsBackend::Wgpu;
+        }
+
         // 检查窗口尺寸
         if let Some(idx) = args.iter().position(|a| a == "--width") {
             if let Some(width_str) = args.get(idx + 1) {
@@ -309,12 +316,19 @@ impl GraphicsBackend {
         matches!(self, GraphicsBackend::Vulkan)
     }
 
+    /// 检查是否为 wgpu 后端
+    #[allow(dead_code)]
+    pub fn is_wgpu(&self) -> bool {
+        matches!(self, GraphicsBackend::Wgpu)
+    }
+
     /// 获取后端名称
     #[allow(dead_code)]
     pub fn name(&self) -> &'static str {
         match self {
             GraphicsBackend::Vulkan => "Vulkan",
             GraphicsBackend::Dx12 => "DirectX 12",
+            GraphicsBackend::Wgpu => "wgpu",
         }
     }
 }
