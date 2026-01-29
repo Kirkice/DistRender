@@ -125,7 +125,12 @@ impl InputSystem {
         }
 
         let dx = (position.0 - self.last_mouse_pos.0) as f32;
-        let dy = (position.1 - self.last_mouse_pos.1) as f32;
+        let mut dy = (position.1 - self.last_mouse_pos.1) as f32;
+
+        if crate::core::renderer_backend() == Some(crate::core::RendererBackendKind::Wgpu) {
+            // wgpu平台修改 因为 y 轴方向相反，所以需要取反
+            dy = -dy;
+        }
 
         self.mouse_delta = (dx, dy);
         self.last_mouse_pos = position;

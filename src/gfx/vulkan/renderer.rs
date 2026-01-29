@@ -38,6 +38,7 @@ use crate::core::error::{Result, DistRenderError, GraphicsError};
 use crate::geometry::loaders::{MeshLoader, ObjLoader};
 use crate::component::{Camera, DirectionalLight};
 use crate::core::math::Vector3;
+use crate::gui::ipc::GuiStatePacket;
 use std::path::Path;
 use std::f32::consts::PI;
 
@@ -160,7 +161,7 @@ impl Renderer {
         );
 
         // 加载 OBJ 模型文件
-        let obj_path = Path::new("assets/models/sphere.obj");
+        let obj_path = Path::new(&scene.model.path);
         let (vertices, indices) = if obj_path.exists() {
             info!("Loading mesh from: {}", obj_path.display());
             match ObjLoader::load_from_file(obj_path) {
@@ -794,6 +795,30 @@ impl Renderer {
     /// Called every frame before draw() to apply user input to camera
     pub fn update(&mut self, input_system: &mut crate::core::input::InputSystem, delta_time: f32) {
         input_system.update_camera(&mut self.camera, delta_time);
+    }
+
+    pub fn apply_gui_packet(&mut self, packet: &GuiStatePacket) {
+        self.scene.clear_color = packet.clear_color;
+        self.scene.model.transform.position = packet.model_position;
+        self.scene.model.transform.rotation = packet.model_rotation;
+        self.scene.model.transform.scale = packet.model_scale;
+
+        self.directional_light.intensity = packet.light_intensity;
+        self.directional_light.direction = Vector3::new(
+            packet.light_direction[0],
+            packet.light_direction[1],
+            packet.light_direction[2],
+        )
+        .normalize();
+
+        if (self.camera.fov_x() - packet.camera_fov * PI / 180.0).abs() > 0.01 {
+            self.camera.set_lens(
+                packet.camera_fov * PI / 180.0,
+                self.camera.aspect(),
+                packet.camera_near,
+                packet.camera_far,
+            );
+        }
     }
 }
 

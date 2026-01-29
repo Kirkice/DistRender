@@ -5,7 +5,11 @@
 mod manager;
 mod state;
 mod metrics;
-mod panels;
+pub mod panels;
 
+pub mod ipc;
+mod external;
+
+pub use external::ExternalGui;
 pub use manager::GuiManager;
 pub use state::GuiState;

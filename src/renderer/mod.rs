@@ -9,28 +9,16 @@
 //! - `Renderer`：统一的渲染器接口，对外提供一致的 API
 //! - `Backend`：内部枚举，封装不同的图形后端实现
 //! - 底层实现在 `gfx` 模块中，按 API 分类组织
-//!
-//! # 使用示例
-//!
-//! ```no_run
-//! use winit::event_loop::EventLoop;
-//! use crate::renderer::Renderer;
-//!
-//! let event_loop = EventLoop::new();
-//! let use_dx12 = false;  // 使用 Vulkan
-//! let mut renderer = Renderer::new(&event_loop, use_dx12);
-//!
-//! // 渲染循环
-//! renderer.draw();
-//! ```
 
 use tracing::info;
 use winit::event_loop::EventLoop;
-use crate::gfx::vulkan::Renderer as VulkanRenderer;
-use crate::gfx::dx12::Renderer as Dx12Renderer;
-use crate::gfx::wgpu::Renderer as WgpuRenderer;
-use crate::core::Config;
+
 use crate::core::error::Result;
+use crate::core::Config;
+use crate::gfx::dx12::Renderer as Dx12Renderer;
+use crate::gfx::vulkan::Renderer as VulkanRenderer;
+use crate::gfx::wgpu::Renderer as WgpuRenderer;
+use crate::gui::ipc::GuiStatePacket;
 
 // 通用渲染器组件（与具体 API 无关）
 pub mod vertex;
@@ -44,63 +32,16 @@ pub mod descriptor;
 /// 封装不同的图形 API 实现，支持运行时选择使用哪个后端。
 /// 通过枚举模式实现零成本抽象，避免动态分发的性能开销。
 enum Backend {
-    /// Vulkan 渲染器实例
     Vulkan(VulkanRenderer),
-    /// DirectX 12 渲染器实例
     Dx12(Dx12Renderer),
-    /// wgpu 渲染器实例
     Wgpu(WgpuRenderer),
 }
 
-/// 统一的渲染器接口
-///
-/// 提供与图形 API 无关的渲染接口，内部根据用户选择调用相应的后端实现。
-/// 这是应用程序与渲染系统交互的主要入口点。
-///
-/// # 设计原则
-///
-/// - **抽象性**：隐藏不同图形 API 的实现细节
-/// - **一致性**：提供统一的接口，无论使用哪个后端
-/// - **性能**：使用枚举而非 trait object，避免动态分发开销
-///
-/// # 字段说明
-///
-/// - `backend`：实际的图形后端实现（Vulkan 或 DirectX 12）
 pub struct Renderer {
-    /// 内部图形后端
     backend: Backend,
 }
 
 impl Renderer {
-    /// 创建新的渲染器
-    ///
-    /// 根据配置文件选择合适的图形后端进行初始化。
-    ///
-    /// # 参数
-    ///
-    /// * `event_loop` - Winit 事件循环的引用，用于创建窗口和表面
-    /// * `config` - 引擎配置，包含图形后端选择、窗口参数等
-    ///
-    /// # 返回值
-    ///
-    /// 返回初始化完成的 `Renderer` 实例
-    ///
-    /// # Panics
-    ///
-    /// 如果后端初始化失败（例如驱动不支持、设备不可用等），会 panic
-    ///
-    /// # 示例
-    ///
-    /// ```no_run
-    /// use winit::event_loop::EventLoop;
-    /// use crate::renderer::Renderer;
-    /// use crate::core::Config;
-    ///
-    /// let event_loop = EventLoop::new();
-    /// let config = Config::from_file_or_default("config.toml");
-    ///
-    /// let renderer = Renderer::new(&event_loop, &config);
-    /// ```
     pub fn new(event_loop: &EventLoop<()>, config: &Config, scene: &crate::core::SceneConfig) -> Result<Self> {
         let backend = if config.graphics.backend.is_wgpu() {
             info!("Initializing wgpu Backend");
@@ -119,14 +60,6 @@ impl Renderer {
         Ok(Self { backend })
     }
 
-    /// 处理窗口大小调整
-    ///
-    /// 当窗口大小改变时调用，通知后端重新创建交换链和相关资源。
-    ///
-    /// # 说明
-    ///
-    /// 窗口调整是一个常见操作，需要重新创建与窗口尺寸相关的资源，
-    /// 如交换链、帧缓冲、视口等。
     pub fn resize(&mut self) {
         match &mut self.backend {
             Backend::Vulkan(r) => r.resize(),
@@ -135,31 +68,6 @@ impl Renderer {
         }
     }
 
-    /// 绘制一帧
-    ///
-    /// 执行渲染命令，将图形输出到屏幕。
-    /// 这是渲染循环的核心方法，应该在每帧被调用一次。
-    ///
-    /// # 说明
-    ///
-    /// 此方法会：
-    /// 1. 获取下一个可用的交换链图像
-    /// 2. 记录渲染命令
-    /// 3. 提交命令到 GPU
-    /// 4. 呈现渲染结果
-    ///
-    /// # 示例
-    ///
-    /// ```no_run
-    /// # use winit::event_loop::EventLoop;
-    /// # use crate::renderer::Renderer;
-    /// # let event_loop = EventLoop::new();
-    /// # let mut renderer = Renderer::new(&event_loop, false);
-    /// // 渲染循环
-    /// loop {
-    ///     renderer.draw();
-    /// }
-    /// ```
     pub fn draw(&mut self) -> Result<()> {
         match &mut self.backend {
             Backend::Vulkan(r) => r.draw(),
@@ -168,14 +76,6 @@ impl Renderer {
         }
     }
 
-    /// Update camera based on input system state
-    ///
-    /// Should be called every frame before `draw()` to apply user input to camera.
-    ///
-    /// # Parameters
-    ///
-    /// * `input_system` - Input system containing current keyboard/mouse state
-    /// * `delta_time` - Time elapsed since last frame in seconds
     pub fn update(&mut self, input_system: &mut crate::core::input::InputSystem, delta_time: f32) {
         match &mut self.backend {
             Backend::Vulkan(r) => r.update(input_system, delta_time),
@@ -184,18 +84,19 @@ impl Renderer {
         }
     }
 
-    /// Get a reference to the window
-    ///
-    /// Returns the window associated with this renderer for cursor control and other operations.
-    ///
-    /// # Returns
-    ///
-    /// Reference to the winit Window
     pub fn window(&self) -> &winit::window::Window {
         match &self.backend {
             Backend::Vulkan(r) => r.window(),
             Backend::Dx12(r) => r.window(),
             Backend::Wgpu(r) => r.window(),
+        }
+    }
+
+    pub fn apply_gui_packet(&mut self, packet: &GuiStatePacket) {
+        match &mut self.backend {
+            Backend::Vulkan(r) => r.apply_gui_packet(packet),
+            Backend::Dx12(r) => r.apply_gui_packet(packet),
+            Backend::Wgpu(r) => r.apply_gui_packet(packet),
         }
     }
 }

@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["DistRender Team"]
 description = "A multi-backend rendering engine supporting Vulkan and DirectX 12"
+default-run = "dist_render"
 
 [dependencies]
 
@@ -47,3 +48,5 @@ egui = "0.26"          # egui 核心库
 egui-wgpu = "0.26"     # egui 的 wgpu 渲染后端
 egui-winit = "0.26"    # egui 的 winit 集成
 
+# 共享内存 IPC
+shared_memory = "0.12" # 用于进程间共享数据

@@ -62,8 +62,9 @@ impl WgpuBackend {
 
         // 2. 创建窗口
         debug!("Creating window");
+        let title = format!("{} [{}]", config.window.title, config.graphics.backend.name());
         let window = WindowBuilder::new()
-            .with_title(&config.window.title)
+            .with_title(title)
             .with_inner_size(winit::dpi::LogicalSize::new(
                 config.window.width,
                 config.window.height,

@@ -28,7 +28,10 @@ pub mod event;
 pub mod scene;
 pub mod input;
 
+pub mod runtime;
+
 // 重新导出常用类型，方便使用
 pub use math::Matrix4;
 pub use config::Config;
 pub use scene::SceneConfig;
+pub use runtime::{RendererBackendKind, init_renderer_backend, renderer_backend};

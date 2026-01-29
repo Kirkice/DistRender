@@ -1,29 +1,76 @@
 # DistRender - 渲染引擎
 
-一个支持多图形 API 的现代化渲染引擎，目前支持 Vulkan 和 DirectX 12。
+一个支持多图形 API 的现代化渲染引擎，目前支持 Vulkan、DirectX 12 与 wgpu。
 
 ## ✨ 特性
 
-- 🎨 **多后端支持**：支持 Vulkan（跨平台）和 DirectX 12（Windows）
-- 🔧 **统一接口**：提供一致的渲染 API，无缝切换图形后端
+- 🎨 **多后端支持**：支持 Vulkan（跨平台）、DirectX 12（Windows）与 wgpu（跨平台抽象后端）
+- 🔧 **统一接口**：统一的 `renderer::Renderer` 接口，在运行时选择后端
+- 🎛️ **GUI 系统**：
+  - wgpu 后端：内置 egui 面板
+  - Vulkan/DX12 后端：外部 GUI 进程（`dist_render_gui`）+ 共享内存同步参数
+- 🖱️ **输入系统**：基于 winit 的键鼠输入，支持 WASD 移动与右键拖拽视角
 - ⚡ **事件系统**：类型安全、零成本抽象的事件处理框架
-- 📚 **完整文档**：所有模块都有详细的中文文档注释
-- 🚀 **高性能**：使用现代图形 API，充分发挥 GPU 性能
 - 🛠️ **模块化设计**：清晰的模块划分，易于维护和扩展
 
 ## 🚀 快速开始
 
-### 使用 Vulkan（默认）
+### 运行主程序（默认）
+
+由于工程包含多个二进制程序（主渲染器 + 外部 GUI），已在 `Cargo.toml` 配置 `default-run = "dist_render"`，因此以下命令会默认运行主程序：
 
 ```bash
 cargo run
 ```
 
-### 使用 DirectX 12
+### 选择图形后端
+
+- Vulkan：
+
+```bash
+cargo run -- --vulkan
+```
+
+- DirectX 12：
 
 ```bash
 cargo run -- --dx12
 ```
+
+- wgpu：
+
+```bash
+cargo run -- --wgpu
+```
+
+### 外部 GUI（仅 Vulkan/DX12 默认启用）
+
+当使用 Vulkan / DX12 后端时，主程序会自动启动外部 GUI 程序 `dist_render_gui`，并通过共享内存把 GUI 参数同步到渲染后端。
+
+你也可以通过命令行控制：
+
+- 强制启用外部 GUI：
+
+```bash
+cargo run -- --external-gui
+```
+
+- 禁用外部 GUI：
+
+```bash
+cargo run -- --no-external-gui
+```
+
+### 单独运行外部 GUI 程序
+
+```bash
+cargo run --bin dist_render_gui
+```
+
+说明：主程序启动外部 GUI 时，会按以下顺序查找可执行文件：
+
+- **优先（B）**：主程序可执行文件同目录下的 `dist_render_gui(.exe)`
+- **兜底（A）**：`target/debug/dist_render_gui(.exe)`
 
 ### Release 模式
 
@@ -31,31 +78,19 @@ cargo run -- --dx12
 cargo run --release
 ```
 
-## 📁 项目结构
+## 📁 项目结构（简化）
 
 ```
 DistRender/
 ├── src/
-│   ├── main.rs              # 应用程序入口
-│   ├── core/                # 核心功能模块
-│   │   ├── math/            # 数学库
-│   │   ├── log.rs           # 日志系统
-│   │   ├── config.rs        # 配置管理
-│   │   ├── error.rs         # 错误处理
-│   │   └── event.rs         # 事件系统 ⭐
-│   ├── gfx/                 # 图形后端模块
-│   │   ├── mod.rs           # 模块导出
-│   │   ├── backend.rs       # GraphicsBackend trait 定义
-│   │   ├── vulkan.rs        # Vulkan 后端实现
-│   │   └── dx12.rs          # DirectX 12 后端实现
-│   └── renderer/            # 渲染器模块
-│       ├── mod.rs           # 统一渲染接口
-│       ├── vulkan.rs        # Vulkan 渲染器
-│       ├── dx12.rs          # DX12 渲染器
-│       ├── vertex.rs        # 顶点数据定义
-│       └── shaders.rs       # 着色器程序
-├── examples/
-│   └── event_system_demo.rs # 事件系统演示
+│   ├── main.rs                  # 主渲染程序入口（dist_render）
+│   ├── lib.rs                   # 库入口（供多个 bin 复用）
+│   ├── bin/
+│   │   └── dist_render_gui.rs   # 外部 GUI 程序入口
+│   ├── core/                    # 核心模块：配置/日志/数学/输入/事件等
+│   ├── gfx/                     # 后端实现：vulkan / dx12 / wgpu
+│   ├── renderer/                # 统一 Renderer 接口 + 通用渲染资源
+│   └── gui/                     # GUI 系统（wgpu 内置 + 共享内存 IPC）
 └── Cargo.toml
 ```
 
@@ -83,151 +118,36 @@ DistRender 提供了一个类型安全、高性能的事件处理框架，参考
 | **系统** | `TickEvent` | 每帧时钟事件 |
 | | `DrawEvent` | 绘制事件 |
 
-### 快速开始
-
-```rust
-use DistRender::core::event::*;
-
-fn main() {
-    // 1. 创建事件
-    let mut event = WindowResizeEvent::new(1920, 1080);
-
-    // 2. 创建分发器
-    let mut dispatcher = EventDispatcher::new(&mut event);
-
-    // 3. 处理事件
-    dispatcher.dispatch(EventType::WindowResize, |e| {
-        println!("窗口调整为: {}", e.detail());
-        true // 标记为已处理
-    });
-
-    // 4. 检查处理状态
-    println!("事件已处理: {}", dispatcher.is_handled());
-}
-```
-
 ### 运行演示
 
 ```bash
 cargo run --example event_system_demo
 ```
 
-### 架构对比
-
-| 特性 | DistEngine (C++) | DistRender (Rust) |
-|------|------------------|-------------------|
-| 事件基类 | `Event` 抽象类 | `Event` trait |
-| 类型检查 | 运行时 `dynamic_cast` | 编译时类型匹配 |
-| 分发机制 | 模板 + unsafe cast | 模式匹配 + 闭包 |
-| 性能 | 虚函数调用开销 | 零成本抽象 |
-
-### 使用示例：WASD 移动控制
-
-```rust
-use DistRender::core::event::*;
-
-struct CameraController {
-    position: (f32, f32, f32),
-    speed: f32,
-}
-
-impl CameraController {
-    fn handle_key(&mut self, event: &KeyboardEvent, dt: f32) {
-        if !event.pressed { return; }
-
-        let distance = self.speed * dt;
-        match event.key_code {
-            KeyCode::W => self.position.2 += distance,
-            KeyCode::S => self.position.2 -= distance,
-            KeyCode::A => self.position.0 -= distance,
-            KeyCode::D => self.position.0 += distance,
-            _ => {}
-        }
-    }
-}
-```
-
-更多详细文档和教程，请运行 `cargo doc --open` 查看完整 API 文档。
-
 ## 🏗️ 架构设计
 
-### 分层架构
+### 分层架构（概念）
 
 ```
 ┌─────────────────────────────────┐
 │         Application            │  应用层（main.rs）
 ├─────────────────────────────────┤
 │     Renderer（统一接口）       │  渲染层
-├────────────┬────────────────────┤
-│  Vulkan    │     DirectX 12     │  后端层
-│  Renderer  │     Renderer       │
-├────────────┼────────────────────┤
-│  Vulkan    │     DirectX 12     │  图形 API 层
-│  Backend   │     Backend        │
-└────────────┴────────────────────┘
-```
-
-### 核心设计原则
-
-1. **抽象化**：通过 `GraphicsBackend` trait 定义统一接口
-2. **零成本抽象**：使用枚举而非 trait object，避免动态分发
-3. **模块化**：清晰的职责划分，高内聚低耦合
-4. **文档化**：完整的 Rustdoc 注释，易于理解和维护
-
-## 📖 API 文档
-
-生成并查看完整的 API 文档：
-
-```bash
-cargo doc --open
+├────────────┬───────────┬────────┤
+│  Vulkan    │   DX12     │  wgpu  │  后端层
+│  Renderer  │  Renderer  │Renderer│
+└────────────┴───────────┴────────┘
 ```
 
 ## 🔧 技术栈
 
-- **Rust**：系统编程语言，提供内存安全和高性能
-- **Vulkan**：通过 vulkano 库使用
-- **DirectX 12**：通过 windows-rs 库使用
+- **Rust**：系统编程语言
 - **Winit**：跨平台窗口管理
-
-## 📝 最近优化
-
-### 核心功能
-- ✅ **事件系统**：实现类型安全、零成本抽象的事件处理框架
-  - 支持窗口、鼠标、键盘、系统等 8 种事件类型
-  - 提供事件处理链和状态追踪
-  - 完整的单元测试和使用示例
-  - 详细的中文文档和注释
-
-### 架构优化
-- ✅ 创建 `GraphicsBackend` trait 统一后端接口
-- ✅ 重命名 `GfxDevice` 为 `VulkanBackend`，保持命名一致性
-- ✅ 改进 `gfx` 和 `renderer` 模块结构
-- ✅ 实现帧资源管理和同步机制
-
-### 文档优化
-- ✅ 为所有模块添加完整的中文文档注释
-- ✅ 添加详细的使用示例和架构说明
-- ✅ 为关键函数添加参数、返回值和异常说明
-- ✅ 提供事件系统演示程序
-
-### 代码质量
-- ✅ 清理未使用的导入
-- ✅ 修正项目名称（RustroverProjects → DistRender）
-- ✅ 改进错误处理和调试输出
-- ✅ 添加内联注释说明关键逻辑
-
-## 🎯 未来计划
-
-- [ ] 支持更多图形后端（Metal、OpenGL）
-- [ ] 实现更复杂的渲染场景
-- [ ] 添加纹理和材质系统
-- [ ] 实现相机控制
-- [ ] 添加性能分析工具
+- **Vulkan**：通过 `vulkano`/`ash`
+- **DirectX 12**：通过 `windows-rs`
+- **wgpu**：跨平台图形抽象
+- **egui**：GUI 框架（wgpu 内置渲染；Vulkan/DX12 通过外部 GUI + IPC 同步）
 
 ## 📄 许可证
 
 MIT License
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！

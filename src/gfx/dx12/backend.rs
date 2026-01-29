@@ -121,7 +121,7 @@ impl Dx12Backend {
         // 创建窗口
         let window = Arc::new(
             WindowBuilder::new()
-                .with_title(&config.window.title)
+                .with_title(format!("{} [{}]", config.window.title, config.graphics.backend.name()))
                 .with_inner_size(LogicalSize::new(width, height))
                 .with_resizable(config.window.resizable)
                 .build(event_loop)

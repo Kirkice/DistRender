@@ -19,7 +19,7 @@ resizable = true
 # 可选值：
 #   - "vulkan": 使用 Vulkan API（跨平台，默认）
 #   - "dx12": 使用 DirectX 12 API（仅 Windows）
-backend = "vulkan"
+backend = "wgpu"
 
 # 垂直同步（V-Sync）
 # true: 启用 V-Sync，限制帧率为显示器刷新率

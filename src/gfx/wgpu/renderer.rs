@@ -21,6 +21,7 @@ use crate::component::{Camera, DirectionalLight};
 use crate::core::input::InputSystem;
 use crate::core::math::Vector3;
 use crate::gui::{GuiManager, GuiState};
+use crate::gui::ipc::GuiStatePacket;
 use std::path::Path;
 use std::f32::consts::PI;
 
@@ -375,7 +376,8 @@ impl Renderer {
         // 3. 更新 MVP 矩阵
         let model = self.scene.model.transform.to_matrix();
         let view_matrix = self.camera.view_matrix();
-        let proj_matrix = self.camera.proj_matrix();
+        let mut proj_matrix = self.camera.proj_matrix();
+        proj_matrix[(1, 1)] *= -1.0;
 
         // 4. 准备光照参数
         let light_dir = self.directional_light.direction;
@@ -503,33 +505,47 @@ impl Renderer {
         input_system.update_camera(&mut self.camera, delta_time);
     }
 
+    pub fn apply_gui_packet(&mut self, packet: &GuiStatePacket) {
+        self.scene.clear_color = packet.clear_color;
+        self.scene.model.transform.position = packet.model_position;
+        self.scene.model.transform.rotation = packet.model_rotation;
+        self.scene.model.transform.scale = packet.model_scale;
+
+        self.directional_light.intensity = packet.light_intensity;
+        self.directional_light.direction = Vector3::new(
+            packet.light_direction[0],
+            packet.light_direction[1],
+            packet.light_direction[2],
+        )
+        .normalize();
+
+        if (self.camera.fov_x() - packet.camera_fov * PI / 180.0).abs() > 0.01 {
+            self.camera.set_lens(
+                packet.camera_fov * PI / 180.0,
+                self.camera.aspect(),
+                packet.camera_near,
+                packet.camera_far,
+            );
+        }
+    }
+
     /// 应用 GUI 状态到场景
     fn apply_gui_state(&mut self) {
         let state = self.gui_manager.state();
 
-        // 更新场景配置
-        self.scene.clear_color = state.clear_color;
-        self.scene.model.transform.position = state.model_position;
-        self.scene.model.transform.rotation = state.model_rotation;
-        self.scene.model.transform.scale = state.model_scale;
+        let packet = GuiStatePacket {
+            clear_color: state.clear_color,
+            light_intensity: state.light_intensity,
+            light_direction: state.light_direction,
+            model_position: state.model_position,
+            model_rotation: state.model_rotation,
+            model_scale: state.model_scale,
+            camera_fov: state.camera_fov,
+            camera_near: state.camera_near,
+            camera_far: state.camera_far,
+        };
 
-        // 更新光照
-        self.directional_light.intensity = state.light_intensity;
-        self.directional_light.direction = Vector3::new(
-            state.light_direction[0],
-            state.light_direction[1],
-            state.light_direction[2],
-        ).normalize();
-
-        // 更新相机
-        if (self.camera.fov_x() - state.camera_fov * PI / 180.0).abs() > 0.01 {
-            self.camera.set_lens(
-                state.camera_fov * PI / 180.0,
-                self.camera.aspect(),
-                state.camera_near,
-                state.camera_far,
-            );
-        }
+        self.apply_gui_packet(&packet);
     }
 
     /// 处理 GUI 事件

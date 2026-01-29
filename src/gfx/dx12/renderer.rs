@@ -12,6 +12,7 @@ use crate::gfx::dx12::descriptor::Dx12DescriptorManager;
 use crate::geometry::loaders::{MeshLoader, ObjLoader};
 use crate::component::{Camera, DirectionalLight};
 use crate::core::math::Vector3;
+use crate::gui::ipc::GuiStatePacket;
 use std::path::Path;
 use std::f32::consts::PI;
 use windows::Win32::Graphics::Dxgi::{DXGI_PRESENT, DXGI_SWAP_CHAIN_FLAG, Common::*};
@@ -963,6 +964,30 @@ impl Renderer {
     /// Called every frame before draw() to apply user input to camera
     pub fn update(&mut self, input_system: &mut crate::core::input::InputSystem, delta_time: f32) {
         input_system.update_camera(&mut self.camera, delta_time);
+    }
+
+    pub fn apply_gui_packet(&mut self, packet: &GuiStatePacket) {
+        self.scene.clear_color = packet.clear_color;
+        self.scene.model.transform.position = packet.model_position;
+        self.scene.model.transform.rotation = packet.model_rotation;
+        self.scene.model.transform.scale = packet.model_scale;
+
+        self.directional_light.intensity = packet.light_intensity;
+        self.directional_light.direction = Vector3::new(
+            packet.light_direction[0],
+            packet.light_direction[1],
+            packet.light_direction[2],
+        )
+        .normalize();
+
+        if (self.camera.fov_x() - packet.camera_fov * PI / 180.0).abs() > 0.01 {
+            self.camera.set_lens(
+                packet.camera_fov * PI / 180.0,
+                self.camera.aspect(),
+                packet.camera_near,
+                packet.camera_far,
+            );
+        }
     }
 
     /// Get a reference to the window for cursor control

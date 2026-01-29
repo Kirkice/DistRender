@@ -124,7 +124,7 @@ impl VulkanBackend {
         // 3. 创建窗口和表面（使用配置中的窗口参数）
         let window = Arc::new(
             WindowBuilder::new()
-                .with_title(&config.window.title)
+                .with_title(format!("{} [{}]", config.window.title, config.graphics.backend.name()))
                 .with_inner_size(LogicalSize::new(config.window.width, config.window.height))
                 .with_resizable(config.window.resizable)
                 .build(event_loop)

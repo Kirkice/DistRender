@@ -173,22 +173,6 @@ impl Default for LoggingConfig {
 
 impl Config {
     /// 从配置文件加载
-    ///
-    /// # 参数
-    ///
-    /// * `path` - 配置文件路径
-    ///
-    /// # 返回值
-    ///
-    /// 成功返回 `Config` 实例，失败返回错误
-    ///
-    /// # 示例
-    ///
-    /// ```no_run
-    /// use crate::core::Config;
-    ///
-    /// let config = Config::from_file("config.toml")?;
-    /// ```
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path_str = path.as_ref().to_string_lossy().to_string();
 
@@ -200,27 +184,10 @@ impl Config {
     }
 
     /// 从配置文件加载，如果文件不存在则使用默认配置
-    ///
-    /// # 参数
-    ///
-    /// * `path` - 配置文件路径
-    ///
-    /// # 返回值
-    ///
-    /// 返回 `Config` 实例
     pub fn from_file_or_default<P: AsRef<Path>>(path: P) -> Self {
         Self::from_file(path).unwrap_or_default()
     }
 
-    /// 保存配置到文件
-    ///
-    /// # 参数
-    ///
-    /// * `path` - 配置文件路径
-    ///
-    /// # 返回值
-    ///
-    /// 成功返回 `Ok(())`，失败返回错误
     #[allow(dead_code)]
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let contents = toml::to_string_pretty(self)
@@ -230,18 +197,6 @@ impl Config {
         Ok(())
     }
 
-    /// 从命令行参数覆盖配置
-    ///
-    /// # 参数
-    ///
-    /// * `args` - 命令行参数迭代器
-    ///
-    /// # 说明
-    ///
-    /// 支持的参数：
-    /// - `--dx12`: 使用 DirectX 12 后端
-    /// - `--width <value>`: 设置窗口宽度
-    /// - `--height <value>`: 设置窗口高度
     pub fn apply_args<I>(&mut self, args: I)
     where
         I: IntoIterator,
@@ -249,17 +204,18 @@ impl Config {
     {
         let args: Vec<String> = args.into_iter().map(|s| s.as_ref().to_string()).collect();
 
-        // 检查是否使用 DX12
         if args.iter().any(|a| a == "--dx12") {
             self.graphics.backend = GraphicsBackend::Dx12;
         }
 
-        // 检查是否使用 wgpu
+        if args.iter().any(|a| a == "--vulkan") {
+            self.graphics.backend = GraphicsBackend::Vulkan;
+        }
+
         if args.iter().any(|a| a == "--wgpu") {
             self.graphics.backend = GraphicsBackend::Wgpu;
         }
 
-        // 检查窗口尺寸
         if let Some(idx) = args.iter().position(|a| a == "--width") {
             if let Some(width_str) = args.get(idx + 1) {
                 if let Ok(width) = width_str.parse() {
@@ -277,26 +233,21 @@ impl Config {
         }
     }
 
-    /// 验证配置的有效性
-    ///
-    /// # 返回值
-    ///
-    /// 配置有效返回 `Ok(())`，否则返回错误
     pub fn validate(&self) -> Result<()> {
-        // 验证窗口尺寸
         if self.window.width == 0 || self.window.height == 0 {
             return Err(ConfigError::InvalidValue {
                 field: "window.width/height".to_string(),
                 reason: "Window dimensions must be greater than 0".to_string(),
-            }.into());
+            }
+            .into());
         }
 
-        // 验证 MSAA 采样数
         if !matches!(self.graphics.msaa_samples, 1 | 2 | 4 | 8 | 16) {
             return Err(ConfigError::InvalidValue {
                 field: "graphics.msaa_samples".to_string(),
                 reason: "MSAA samples must be 1, 2, 4, 8, or 16".to_string(),
-            }.into());
+            }
+            .into());
         }
 
         Ok(())
@@ -304,25 +255,21 @@ impl Config {
 }
 
 impl GraphicsBackend {
-    /// 检查是否为 DX12 后端
     #[allow(dead_code)]
     pub fn is_dx12(&self) -> bool {
         matches!(self, GraphicsBackend::Dx12)
     }
 
-    /// 检查是否为 Vulkan 后端
     #[allow(dead_code)]
     pub fn is_vulkan(&self) -> bool {
         matches!(self, GraphicsBackend::Vulkan)
     }
 
-    /// 检查是否为 wgpu 后端
     #[allow(dead_code)]
     pub fn is_wgpu(&self) -> bool {
         matches!(self, GraphicsBackend::Wgpu)
     }
 
-    /// 获取后端名称
     #[allow(dead_code)]
     pub fn name(&self) -> &'static str {
         match self {
