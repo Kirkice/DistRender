@@ -102,7 +102,10 @@ impl Renderer {
             #[cfg(not(target_os = "macos"))]
             GfxBackend::Metal => {
                 return Err(crate::core::error::DistRenderError::Config(
-                    "Metal backend is only available on macOS".to_string()
+                    crate::core::error::ConfigError::InvalidValue {
+                        field: "backend".to_string(),
+                        reason: "Metal backend is only available on macOS".to_string(),
+                    }
                 ));
             }
             GfxBackend::Vulkan => {

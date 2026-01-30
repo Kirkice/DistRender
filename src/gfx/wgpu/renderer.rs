@@ -1,34 +1,34 @@
-//! wgpu 渲染器实现
+//! wgpu 娓叉煋鍣ㄥ疄鐜?
 //!
-//! 本模块实现了基于 wgpu 的渲染器，包括：
-//! - 渲染管线创建
-//! - 资源管理（顶点缓冲、索引缓冲、Uniform缓冲）
-//! - 渲染循环
-//! - 相机和光照集成
+//! 鏈ā鍧楀疄鐜颁簡鍩轰簬 wgpu 鐨勬覆鏌撳櫒锛屽寘鎷細
+//! - 娓叉煋绠＄嚎鍒涘缓
+//! - 璧勬簮绠＄悊锛堥《鐐圭紦鍐层€佺储寮曠紦鍐层€乁niform缂撳啿锛?
+//! - 娓叉煋寰幆
+//! - 鐩告満鍜屽厜鐓ч泦鎴?
 
 use tracing::{debug, info, warn};
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
-use crate::gfx::wgpu::backend::WgpuBackend;
+use crate::gfx::wgpu::context::WgpuContext;
 use crate::renderer::vertex::{MyVertex, create_default_triangle, convert_geometry_vertex};
 use crate::renderer::resource::FrameResourcePool;
 use crate::renderer::sync::FenceManager;
-use crate::core::{Config, SceneConfig, Matrix4};
+use crate::core::{Config, SceneConfig};
 use crate::core::error::{Result, GraphicsError};
 use crate::geometry::loaders::{MeshLoader, ObjLoader};
 use crate::component::{Camera, DirectionalLight};
 use crate::core::input::InputSystem;
-use crate::core::math::Vector3;
+use crate::math::{Vector3, Matrix4};
 use crate::gui::{GuiManager, GuiState};
 use crate::gui::ipc::GuiStatePacket;
 use std::path::Path;
 use std::f32::consts::PI;
 
-/// Uniform Buffer Object - MVP 矩阵和光照数据
+/// Uniform Buffer Object - MVP 鐭╅樀鍜屽厜鐓ф暟鎹?
 ///
-/// 这个结构体会被传输到 GPU 的 uniform buffer 中。
-/// 必须使用 #[repr(C)] 保证内存布局与着色器一致。
+/// 杩欎釜缁撴瀯浣撲細琚紶杈撳埌 GPU 鐨?uniform buffer 涓€?
+/// 蹇呴』浣跨敤 #[repr(C)] 淇濊瘉鍐呭瓨甯冨眬涓庣潃鑹插櫒涓€鑷淬€?
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 struct UniformBufferObject {
@@ -60,11 +60,11 @@ impl UniformBufferObject {
     }
 }
 
-/// wgpu 渲染器
+/// wgpu 娓叉煋鍣?
 pub struct Renderer {
-    gfx: WgpuBackend,
+    gfx: WgpuContext,
 
-    // 渲染管线和资源
+    // 娓叉煋绠＄嚎鍜岃祫婧?
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
@@ -73,24 +73,24 @@ pub struct Renderer {
     depth_texture: wgpu::Texture,
     depth_view: wgpu::TextureView,
 
-    // 场景对象
+    // 鍦烘櫙瀵硅薄
     camera: Camera,
     directional_light: DirectionalLight,
     scene: SceneConfig,
 
-    // 通用管理器
+    // 閫氱敤绠＄悊鍣?
     frame_resource_pool: FrameResourcePool,
     fence_manager: FenceManager,
 
-    // GUI 管理器
+    // GUI 绠＄悊鍣?
     gui_manager: GuiManager,
 
-    // 渲染状态
+    // 娓叉煋鐘舵€?
     num_indices: u32,
 }
 
 impl Renderer {
-    /// 创建新的 wgpu 渲染器
+    /// 鍒涘缓鏂扮殑 wgpu 娓叉煋鍣?
     pub fn new(
         event_loop: &winit::event_loop::EventLoop<()>,
         config: &Config,
@@ -98,10 +98,10 @@ impl Renderer {
     ) -> Result<Self> {
         info!("Creating wgpu renderer");
 
-        // 1. 创建 wgpu 后端
-        let gfx = WgpuBackend::new(event_loop, config)?;
+        // 1. 鍒涘缓 wgpu 鍚庣
+        let gfx = WgpuContext::new(event_loop, config)?;
 
-        // 2. 加载着色器模块
+        // 2. 鍔犺浇鐫€鑹插櫒妯″潡
         debug!("Loading shaders");
         let shader_source = include_str!("shaders/shader.wgsl");
         let shader_module = gfx.device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -109,7 +109,7 @@ impl Renderer {
             source: wgpu::ShaderSource::Wgsl(shader_source.into()),
         });
 
-        // 3. 创建 Uniform Buffer
+        // 3. 鍒涘缓 Uniform Buffer
         debug!("Creating uniform buffer");
         let uniform_buffer = gfx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Uniform Buffer"),
@@ -118,7 +118,7 @@ impl Renderer {
             mapped_at_creation: false,
         });
 
-        // 4. 创建 Bind Group Layout
+        // 4. 鍒涘缓 Bind Group Layout
         debug!("Creating bind group layout");
         let bind_group_layout = gfx.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Uniform Bind Group Layout"),
@@ -134,7 +134,7 @@ impl Renderer {
             }],
         });
 
-        // 5. 创建 Bind Group
+        // 5. 鍒涘缓 Bind Group
         let bind_group = gfx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Uniform Bind Group"),
             layout: &bind_group_layout,
@@ -144,14 +144,14 @@ impl Renderer {
             }],
         });
 
-        // 6. 创建渲染管线布局
+        // 6. 鍒涘缓娓叉煋绠＄嚎甯冨眬
         let pipeline_layout = gfx.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
 
-        // 7. 创建深度纹理
+        // 7. 鍒涘缓娣卞害绾圭悊
         debug!("Creating depth texture");
         let size = gfx.window().inner_size();
         let depth_texture = gfx.device.create_texture(&wgpu::TextureDescriptor {
@@ -170,7 +170,7 @@ impl Renderer {
         });
         let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        // 8. 创建渲染管线
+        // 8. 鍒涘缓娓叉煋绠＄嚎
         debug!("Creating render pipeline");
         let render_pipeline = gfx.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
@@ -236,7 +236,7 @@ impl Renderer {
             multiview: None,
         });
 
-        // 9. 加载模型数据或使用默认三角形
+        // 9. 鍔犺浇妯″瀷鏁版嵁鎴栦娇鐢ㄩ粯璁や笁瑙掑舰
         debug!("Loading mesh data");
         let obj_path = Path::new(&scene.model.path);
         let (vertices, indices) = if obj_path.exists() {
@@ -268,7 +268,7 @@ impl Renderer {
 
         let num_indices = indices.len() as u32;
 
-        // 10. 创建顶点缓冲
+        // 10. 鍒涘缓椤剁偣缂撳啿
         debug!("Creating vertex buffer");
         let vertex_buffer = gfx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
@@ -276,7 +276,7 @@ impl Renderer {
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        // 11. 创建索引缓冲
+        // 11. 鍒涘缓绱㈠紩缂撳啿
         debug!("Creating index buffer");
         let index_buffer = gfx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
@@ -284,7 +284,7 @@ impl Renderer {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        // 12. 初始化相机
+        // 12. 鍒濆鍖栫浉鏈?
         debug!("Initializing camera");
         let mut camera = Camera::main_camera();
         camera.set_position(Vector3::new(
@@ -301,7 +301,7 @@ impl Renderer {
             scene.camera.far_clip,
         );
 
-        // 如果有旋转，使用 look_at 设置相机朝向
+        // 濡傛灉鏈夋棆杞紝浣跨敤 look_at 璁剧疆鐩告満鏈濆悜
         let pitch = scene.camera.transform.rotation[0] * PI / 180.0;
         let yaw = scene.camera.transform.rotation[1] * PI / 180.0;
         let forward = Vector3::new(
@@ -314,7 +314,7 @@ impl Renderer {
 
         info!("Camera component initialized at position {:?}", camera.position());
 
-        // 13. 初始化光照
+        // 13. 鍒濆鍖栧厜鐓?
         debug!("Initializing lights");
         let directional_light = scene.light.to_directional_light("MainLight");
         info!(
@@ -324,11 +324,11 @@ impl Renderer {
             directional_light.direction
         );
 
-        // 14. 初始化帧资源管理
+        // 14. 鍒濆鍖栧抚璧勬簮绠＄悊
         let frame_resource_pool = FrameResourcePool::triple_buffering();
         let fence_manager = FenceManager::new();
 
-        // 15. 初始化 GUI
+        // 15. 鍒濆鍖?GUI
         debug!("Initializing GUI");
         let gui_state = GuiState::new(config, scene);
         let gui_manager = GuiManager::new(
@@ -360,26 +360,26 @@ impl Renderer {
         })
     }
 
-    /// 绘制一帧
+    /// 缁樺埗涓€甯?
     pub fn draw(&mut self) -> Result<()> {
-        // 1. 获取交换链纹理
+        // 1. 鑾峰彇浜ゆ崲閾剧汗鐞?
         let output = self.gfx.surface.get_current_texture()
             .map_err(|e| GraphicsError::SwapchainError(format!("Failed to acquire next image: {}", e)))?;
 
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        // 2. 创建命令编码器
+        // 2. 鍒涘缓鍛戒护缂栫爜鍣?
         let mut encoder = self.gfx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
 
-        // 3. 更新 MVP 矩阵
+        // 3. 鏇存柊 MVP 鐭╅樀
         let model = self.scene.model.transform.to_matrix();
         let view_matrix = self.camera.view_matrix();
         let mut proj_matrix = self.camera.proj_matrix();
         proj_matrix[(1, 1)] *= -1.0;
 
-        // 4. 准备光照参数
+        // 4. 鍑嗗鍏夌収鍙傛暟
         let light_dir = self.directional_light.direction;
         let light_dir_array = [light_dir.x, light_dir.y, light_dir.z];
         let light_color = self.directional_light.color.to_array();
@@ -394,7 +394,7 @@ impl Renderer {
         let camera_pos = self.camera.position();
         let camera_pos_array = [camera_pos.x, camera_pos.y, camera_pos.z];
 
-        // 5. 创建 UBO 并写入缓冲
+        // 5. 鍒涘缓 UBO 骞跺啓鍏ョ紦鍐?
         let ubo = UniformBufferObject::new(
             &model,
             &view_matrix,
@@ -406,7 +406,7 @@ impl Renderer {
 
         self.gfx.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[ubo]));
 
-        // 6. 开始渲染通道
+        // 6. 寮€濮嬫覆鏌撻€氶亾
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
@@ -442,7 +442,7 @@ impl Renderer {
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
 
-        // 7. 更新和渲染 GUI
+        // 7. 鏇存柊鍜屾覆鏌?GUI
         self.gui_manager.update(self.gfx.window());
         self.gui_manager.render(
             &self.gfx.device,
@@ -452,14 +452,14 @@ impl Renderer {
             self.gfx.window(),
         )?;
 
-        // 8. 提交命令
+        // 8. 鎻愪氦鍛戒护
         self.gfx.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
-        // 9. 应用 GUI 状态到场景
+        // 9. 搴旂敤 GUI 鐘舵€佸埌鍦烘櫙
         self.apply_gui_state();
 
-        // 10. 更新帧资源状态
+        // 10. 鏇存柊甯ц祫婧愮姸鎬?
         self.fence_manager.next_value();
         self.frame_resource_pool.current_mut().mark_in_use(self.fence_manager.current_value().value());
         self.frame_resource_pool.advance();
@@ -467,17 +467,17 @@ impl Renderer {
         Ok(())
     }
 
-    /// 处理窗口大小调整
+    /// 澶勭悊绐楀彛澶у皬璋冩暣
     pub fn resize(&mut self) {
         let size = self.gfx.window().inner_size();
 
         if size.width > 0 && size.height > 0 {
             debug!("Resizing to {}x{}", size.width, size.height);
 
-            // 重新配置表面
+            // 閲嶆柊閰嶇疆琛ㄩ潰
             self.gfx.reconfigure_surface(size.width, size.height);
 
-            // 重建深度纹理
+            // 閲嶅缓娣卞害绾圭悊
             self.depth_texture = self.gfx.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("Depth Texture"),
                 size: wgpu::Extent3d {
@@ -494,13 +494,13 @@ impl Renderer {
             });
             self.depth_view = self.depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-            // 更新相机宽高比
+            // 鏇存柊鐩告満瀹介珮姣?
             let aspect = size.width as f32 / size.height as f32;
             self.camera.set_aspect(aspect);
         }
     }
 
-    /// 更新相机（基于输入系统）
+    /// 鏇存柊鐩告満锛堝熀浜庤緭鍏ョ郴缁燂級
     pub fn update(&mut self, input_system: &mut InputSystem, delta_time: f32) {
         input_system.update_camera(&mut self.camera, delta_time);
     }
@@ -529,7 +529,7 @@ impl Renderer {
         }
     }
 
-    /// 应用 GUI 状态到场景
+    /// 搴旂敤 GUI 鐘舵€佸埌鍦烘櫙
     fn apply_gui_state(&mut self) {
         let state = self.gui_manager.state();
 
@@ -548,19 +548,19 @@ impl Renderer {
         self.apply_gui_packet(&packet);
     }
 
-    /// 处理 GUI 事件
-    /// 返回 true 如果事件被 GUI 消费
+    /// 澶勭悊 GUI 浜嬩欢
+    /// 杩斿洖 true 濡傛灉浜嬩欢琚?GUI 娑堣垂
     pub fn handle_gui_event(&mut self, event: &winit::event::WindowEvent) -> bool {
         self.gui_manager.handle_event(self.gfx.window(), event)
     }
 
-    /// 获取窗口引用
+    /// 鑾峰彇绐楀彛寮曠敤
     pub fn window(&self) -> &winit::window::Window {
         self.gfx.window()
     }
 }
 
-/// 实现统一的渲染后端接口
+/// 瀹炵幇缁熶竴鐨勬覆鏌撳悗绔帴鍙?
 impl crate::renderer::backend_trait::RenderBackend for Renderer {
     fn window(&self) -> &winit::window::Window {
         self.window()

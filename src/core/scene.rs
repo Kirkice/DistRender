@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::fs;
 use crate::core::error::{Result, DistRenderError, ConfigError};
-use crate::core::math::{Vector3, Matrix4};
+use crate::math::{Vector3, Matrix4};
 
 /// 3D 变换数据
 ///

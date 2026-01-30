@@ -32,20 +32,20 @@ use crate::gfx::vulkan::shaders::{vs, fs};
 use crate::renderer::resource::FrameResourcePool;
 use crate::renderer::sync::FenceManager;
 use crate::gfx::vulkan::descriptor::VulkanDescriptorManager;
-use crate::gfx::{GraphicsBackend, VulkanBackend as GfxDevice};
-use crate::core::{Config, SceneConfig, Matrix4};
+use crate::gfx::{GraphicsBackend, VulkanContext as GfxDevice};
+use crate::core::{Config, SceneConfig};
 use crate::core::error::{Result, DistRenderError, GraphicsError};
 use crate::geometry::loaders::{MeshLoader, ObjLoader};
 use crate::component::{Camera, DirectionalLight};
-use crate::core::math::Vector3;
+use crate::math::{Vector3, Matrix4};
 use crate::gui::ipc::GuiStatePacket;
 use std::path::Path;
 use std::f32::consts::PI;
 
-/// Uniform Buffer Object - MVP 矩阵数据
+/// Uniform Buffer Object - MVP 鐭╅樀鏁版嵁
 ///
-/// 这个结构体会被传输到 GPU 的 uniform buffer 中。
-/// 必须使用 #[repr(C)] 保证内存布局与着色器一致。
+/// 杩欎釜缁撴瀯浣撲細琚紶杈撳埌 GPU 鐨?uniform buffer 涓€?
+/// 蹇呴』浣跨敤 #[repr(C)] 淇濊瘉鍐呭瓨甯冨眬涓庣潃鑹插櫒涓€鑷淬€?
 #[repr(C)]
 #[derive(Default, Clone, Copy, Debug, Pod, Zeroable)]
 struct UniformBufferObject {
@@ -83,17 +83,17 @@ pub struct Renderer {
     previous_frame_end: Option<Box<dyn GpuFuture>>,
     depth_image: Arc<Image>,
 
-    // 新增：帧资源管理
+    // 鏂板锛氬抚璧勬簮绠＄悊
     frame_resource_pool: FrameResourcePool,
-    // 新增：Fence同步管理
+    // 鏂板锛欶ence鍚屾绠＄悊
     fence_manager: FenceManager,
-    // 新增：描述符管理
+    // 鏂板锛氭弿杩扮绠＄悊
     descriptor_manager: VulkanDescriptorManager,
-    // 新增：场景配置
+    // 鏂板锛氬満鏅厤缃?
     scene: SceneConfig,
-    // 新增：相机组件
+    // 鏂板锛氱浉鏈虹粍浠?
     camera: Camera,
-    // 新增：方向光组件
+    // 鏂板锛氭柟鍚戝厜缁勪欢
     directional_light: DirectionalLight,
 }
 
@@ -141,8 +141,8 @@ impl Renderer {
                     image_extent: window.inner_size().into(),
                     image_usage: ImageUsage::COLOR_ATTACHMENT,
                     composite_alpha,
-                    // 使用 Mailbox 模式实现三重缓冲，提供流畅的渲染
-                    // 如果不支持则回退到 Immediate（无垂直同步）
+                    // 浣跨敤 Mailbox 妯″紡瀹炵幇涓夐噸缂撳啿锛屾彁渚涙祦鐣呯殑娓叉煋
+                    // 濡傛灉涓嶆敮鎸佸垯鍥為€€鍒?Immediate锛堟棤鍨傜洿鍚屾锛?
                     present_mode: PresentMode::Mailbox,
                     ..Default::default()
                 },
@@ -160,7 +160,7 @@ impl Renderer {
             "Swapchain created"
         );
 
-        // 加载 OBJ 模型文件
+        // 鍔犺浇 OBJ 妯″瀷鏂囦欢
         let obj_path = Path::new(&scene.model.path);
         let (vertices, indices) = if obj_path.exists() {
             info!("Loading mesh from: {}", obj_path.display());
@@ -171,7 +171,7 @@ impl Renderer {
                         mesh_data.vertex_count(),
                         mesh_data.index_count()
                     );
-                    // 转换 GeometryVertex 为 MyVertex
+                    // 杞崲 GeometryVertex 涓?MyVertex
                     let verts = mesh_data
                         .vertices
                         .iter()
@@ -335,7 +335,7 @@ impl Renderer {
                     }),
                     multisample_state: Some(Default::default()),
                     color_blend_state: Some(ColorBlendState::with_attachment_states(
-                        1,  // 渲染通道中有 1 个 color attachment
+                        1,  // 娓叉煋閫氶亾涓湁 1 涓?color attachment
                         ColorBlendAttachmentState::default(),
                     )),
                     dynamic_state: [vulkano::pipeline::DynamicState::Viewport].into_iter().collect(),
@@ -357,7 +357,7 @@ impl Renderer {
             depth_range: 0.0..=1.0,
         };
 
-        // 创建深度图像
+        // 鍒涘缓娣卞害鍥惧儚
         let dimensions = images[0].extent();
         let depth_image = Image::new(
             gfx.memory_allocator.clone(),
@@ -378,13 +378,13 @@ impl Renderer {
 
         let previous_frame_end = Some(sync::now(gfx.device.clone()).boxed());
 
-        // 初始化帧资源池（三缓冲）
+        // 鍒濆鍖栧抚璧勬簮姹狅紙涓夌紦鍐诧級
         let frame_resource_pool = FrameResourcePool::triple_buffering();
 
-        // 初始化Fence管理器
+        // 鍒濆鍖朏ence绠＄悊鍣?
         let fence_manager = FenceManager::new();
 
-        // 初始化描述符管理器
+        // 鍒濆鍖栨弿杩扮绠＄悊鍣?
         let descriptor_manager = VulkanDescriptorManager::new(gfx.device.clone());
 
         #[cfg(debug_assertions)]
@@ -393,7 +393,7 @@ impl Renderer {
             debug!("Descriptor manager initialized");
         }
 
-        // 创建相机组件（从场景配置初始化）
+        // 鍒涘缓鐩告満缁勪欢锛堜粠鍦烘櫙閰嶇疆鍒濆鍖栵級
         let mut camera = Camera::main_camera();
         camera.set_position(Vector3::new(
             scene.camera.transform.position[0],
@@ -408,7 +408,7 @@ impl Renderer {
             scene.camera.far_clip,
         );
 
-        // 如果有旋转，使用 look_at 设置相机朝向
+        // 濡傛灉鏈夋棆杞紝浣跨敤 look_at 璁剧疆鐩告満鏈濆悜
         let pitch = scene.camera.transform.rotation[0] * PI / 180.0;
         let yaw = scene.camera.transform.rotation[1] * PI / 180.0;
         let forward = Vector3::new(
@@ -421,7 +421,7 @@ impl Renderer {
 
         info!("Camera component initialized at position {:?}", camera.position());
 
-        // 初始化方向光组件
+        // 鍒濆鍖栨柟鍚戝厜缁勪欢
         let directional_light = scene.light.to_directional_light("MainLight");
         info!(
             "DirectionalLight component initialized: color={:?}, intensity={}, direction={:?}",
@@ -462,24 +462,24 @@ impl Renderer {
         self.recreate_swapchain = true;
     }
 
-    /// 等待GPU完成所有工作（类似DistEngine的FlushCommandQueue）
+    /// 绛夊緟GPU瀹屾垚鎵€鏈夊伐浣滐紙绫讳技DistEngine鐨凢lushCommandQueue锛?
     ///
-    /// 这是一个阻塞操作，会等待所有提交的GPU命令完成。
-    /// 通常用于清理资源或同步点。
+    /// 杩欐槸涓€涓樆濉炴搷浣滐紝浼氱瓑寰呮墍鏈夋彁浜ょ殑GPU鍛戒护瀹屾垚銆?
+    /// 閫氬父鐢ㄤ簬娓呯悊璧勬簮鎴栧悓姝ョ偣銆?
     pub fn flush(&mut self) -> Result<()> {
         #[cfg(debug_assertions)]
         debug!("Flushing command queue...");
 
-        // 等待previous_frame_end完成
+        // 绛夊緟previous_frame_end瀹屾垚
         if let Some(ref mut future) = self.previous_frame_end {
             future.cleanup_finished();
         }
 
-        // 等待所有帧资源完成
+        // 绛夊緟鎵€鏈夊抚璧勬簮瀹屾垚
         let current_fence = self.fence_manager.current_value();
         self.fence_manager.wait_for_value(current_fence)?;
 
-        // 更新所有帧资源为可用
+        // 鏇存柊鎵€鏈夊抚璧勬簮涓哄彲鐢?
         self.frame_resource_pool.update_availability(current_fence.value());
 
         #[cfg(debug_assertions)]
@@ -489,7 +489,7 @@ impl Renderer {
     }
 
     pub fn draw(&mut self) -> Result<()> {
-        // 获取当前帧资源信息
+        // 鑾峰彇褰撳墠甯ц祫婧愪俊鎭?
         let current_frame = self.frame_resource_pool.current_index();
 
         #[cfg(debug_assertions)]
@@ -509,7 +509,7 @@ impl Renderer {
             #[cfg(debug_assertions)]
             debug!("Recreating swapchain, waiting for current frame...");
 
-            // 只等待当前帧完成，不使用 flush() 避免阻塞
+            // 鍙瓑寰呭綋鍓嶅抚瀹屾垚锛屼笉浣跨敤 flush() 閬垮厤闃诲
             if let Some(ref mut future) = self.previous_frame_end {
                 future.cleanup_finished();
             }
@@ -546,7 +546,7 @@ impl Renderer {
 
             self.swapchain = new_swapchain;
 
-            // 重新创建深度图像
+            // 閲嶆柊鍒涘缓娣卞害鍥惧儚
             let new_dimensions = new_images[0].extent();
             self.depth_image = Image::new(
                 self.gfx.memory_allocator.clone(),
@@ -571,7 +571,7 @@ impl Renderer {
             )?;
             self.recreate_swapchain = false;
 
-            // 重置 previous_frame_end 以确保干净的同步状态
+            // 閲嶇疆 previous_frame_end 浠ョ‘淇濆共鍑€鐨勫悓姝ョ姸鎬?
             self.previous_frame_end = Some(sync::now(self.gfx.device.clone()).boxed());
 
             #[cfg(debug_assertions)]
@@ -612,20 +612,20 @@ impl Renderer {
         #[cfg(debug_assertions)]
         trace!(image_index, "Building command buffer");
 
-        // 更新相机的宽高比（如果窗口大小改变）
+        // 鏇存柊鐩告満鐨勫楂樻瘮锛堝鏋滅獥鍙ｅぇ灏忔敼鍙橈級
         let aspect_ratio = self.viewport.extent[0] / self.viewport.extent[1];
         self.camera.set_aspect(aspect_ratio);
 
-        // 计算 MVP 矩阵（使用 Camera 组件）
+        // 璁＄畻 MVP 鐭╅樀锛堜娇鐢?Camera 缁勪欢锛?
         let model = self.scene.model.transform.to_matrix();
         let view = self.camera.view_matrix();
         let mut projection = self.camera.proj_matrix();
 
-        // Vulkan 的 NDC 坐标系 Y 轴与 DX12 相反，需要翻转
-        // nalgebra 生成的是 OpenGL 风格的投影矩阵（Y 向上）
-        // Vulkan 的 Y 轴向下，所以需要翻转投影矩阵的 Y 分量
+        // Vulkan 鐨?NDC 鍧愭爣绯?Y 杞翠笌 DX12 鐩稿弽锛岄渶瑕佺炕杞?
+        // nalgebra 鐢熸垚鐨勬槸 OpenGL 椋庢牸鐨勬姇褰辩煩闃碉紙Y 鍚戜笂锛?
+        // Vulkan 鐨?Y 杞村悜涓嬶紝鎵€浠ラ渶瑕佺炕杞姇褰辩煩闃电殑 Y 鍒嗛噺
 
-        // 使用 DirectionalLight 组件获取光照参数
+        // 浣跨敤 DirectionalLight 缁勪欢鑾峰彇鍏夌収鍙傛暟
         let light_direction = self.directional_light.direction;
         let light_color_intensity = self.directional_light.color.with_intensity(self.directional_light.intensity);
         let light_col_int = [
@@ -644,7 +644,7 @@ impl Renderer {
             [camera_pos.x, camera_pos.y, camera_pos.z],
         );
 
-        // 创建 uniform buffer
+        // 鍒涘缓 uniform buffer
         let uniform_subbuffer = Buffer::from_data(
             self.gfx.memory_allocator.clone(),
             BufferCreateInfo {
@@ -661,7 +661,7 @@ impl Renderer {
             GraphicsError::ResourceCreation(format!("Failed to create uniform buffer: {:?}", e))
         ))?;
 
-        // 创建描述符集
+        // 鍒涘缓鎻忚堪绗﹂泦
         let layout = self.pipeline.layout().set_layouts().get(0)
             .ok_or_else(|| DistRenderError::Graphics(
                 GraphicsError::ResourceCreation("Pipeline has no descriptor set layouts".to_string())
@@ -691,7 +691,7 @@ impl Renderer {
                 RenderPassBeginInfo {
                     clear_values: vec![
                         Some(self.scene.clear_color.into()),
-                        Some(1.0f32.into()),  // 深度缓冲清空为1.0（最远）
+                        Some(1.0f32.into()),  // 娣卞害缂撳啿娓呯┖涓?.0锛堟渶杩滐級
                     ],
                     ..RenderPassBeginInfo::framebuffer(
                         self.framebuffers[image_index as usize].clone(),
@@ -782,16 +782,16 @@ impl Renderer {
             }
         }
 
-        // 更新 Fence 管理器
+        // 鏇存柊 Fence 绠＄悊鍣?
         let fence_value = self.fence_manager.next_value();
 
         #[cfg(debug_assertions)]
         trace!("Frame {} submitted with fence value {}", current_frame, fence_value.value());
 
-        // 标记当前帧资源为使用中
+        // 鏍囪褰撳墠甯ц祫婧愪负浣跨敤涓?
         self.frame_resource_pool.current_mut().mark_in_use(fence_value.value());
 
-        // 推进到下一帧
+        // 鎺ㄨ繘鍒颁笅涓€甯?
         self.frame_resource_pool.advance();
 
         Ok(())
@@ -829,7 +829,7 @@ impl Renderer {
     }
 }
 
-/// 实现统一的渲染后端接口
+/// 瀹炵幇缁熶竴鐨勬覆鏌撳悗绔帴鍙?
 impl crate::renderer::backend_trait::RenderBackend for Renderer {
     fn window(&self) -> &winit::window::Window {
         self.window()
@@ -851,7 +851,7 @@ impl crate::renderer::backend_trait::RenderBackend for Renderer {
         self.apply_gui_packet(packet)
     }
 
-    // handle_gui_event 使用默认实现（返回 false）
+    // handle_gui_event 浣跨敤榛樿瀹炵幇锛堣繑鍥?false锛?
 }
 
 impl Drop for Renderer {
@@ -859,7 +859,7 @@ impl Drop for Renderer {
         #[cfg(debug_assertions)]
         debug!("Dropping Vulkan Renderer...");
         
-        // 只清理 previous_frame_end，不调用 flush 避免卡死
+        // 鍙竻鐞?previous_frame_end锛屼笉璋冪敤 flush 閬垮厤鍗℃
         if let Some(mut future) = self.previous_frame_end.take() {
             future.cleanup_finished();
         }

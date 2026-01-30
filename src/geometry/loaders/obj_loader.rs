@@ -6,7 +6,7 @@ use super::MeshLoader;
 use crate::core::error::{MeshLoadError, Result};
 use crate::geometry::mesh::{MeshData, Subset};
 use crate::geometry::vertex::Vertex;
-use crate::geometry::math_utils::{reconstruct_normals, compute_tangent_space, smooth_normals_by_position};
+use crate::math::geometry::{reconstruct_normals, compute_tangent_space, smooth_normals_by_position};
 use std::path::Path;
 
 /// OBJ 格式加载器

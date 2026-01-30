@@ -4,7 +4,7 @@
 //! 包含基础光源接口和各种光源类型
 
 use crate::component::Component;
-use crate::core::math::Vector3;
+use crate::math::Vector3;
 
 /// 光源颜色（RGB）
 #[derive(Debug, Clone, Copy)]

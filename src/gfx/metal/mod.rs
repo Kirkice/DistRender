@@ -4,11 +4,11 @@
 //! 仅在 macOS/iOS 平台上可用。
 
 #[cfg(target_os = "macos")]
-pub mod backend;
+pub mod context;
 #[cfg(target_os = "macos")]
 pub mod renderer;
 
 #[cfg(target_os = "macos")]
-pub use backend::MetalBackend;
+pub use context::MetalContext;
 #[cfg(target_os = "macos")]
 pub use renderer::Renderer;

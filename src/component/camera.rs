@@ -4,7 +4,7 @@
 //! 管理相机的视锥体和视图矩阵
 
 use super::{Component, Transform};
-use crate::core::math::{Vector3, Matrix4};
+use crate::math::{Vector3, Matrix4};
 use std::f32::consts::PI;
 
 /// Camera 组件

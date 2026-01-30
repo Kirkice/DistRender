@@ -1,7 +1,17 @@
-//! 数学库模块
+//! 统一的数学库模块
 //!
 //! 提供游戏和图形编程常用的数学类型和函数。
 //! 基于 `nalgebra` 但提供了更友好的 API。
+//!
+//! # 模块组织
+//!
+//! - **基础类型**：Vector2/3/4, Matrix3/4, Quaternion, Color
+//! - **常量**：PI, TAU, DEG_TO_RAD 等
+//! - **工具函数**：clamp, lerp, smoothstep 等
+//! - **矩阵辅助函数**：translation, rotation, projection 等
+//! - **四元数辅助函数**：from_euler_angles, slerp 等
+//! - **颜色空间转换**：linear_to_srgb, srgb_to_linear 等
+//! - **几何处理**：法线重建、切线空间计算（见 geometry 子模块）
 //!
 //! # 设计理念
 //!
@@ -10,13 +20,6 @@
 //! - 常用的静态方法（Dot, Cross, Normalize 等）
 //! - 与 DirectXMath 类似的 API 风格
 //! - 零成本抽象，性能与手写代码相当
-//!
-//! # 核心类型
-//!
-//! - `Vector2`, `Vector3`, `Vector4`：向量类型
-//! - `Matrix3`, `Matrix4`：矩阵类型
-//! - `Quaternion`：四元数，用于旋转
-//! - `Color`：颜色类型（RGBA）
 
 // 允许未使用的代码，因为这是一个工具库，不是所有函数都会立即使用
 #![allow(dead_code)]
@@ -330,6 +333,9 @@ pub mod color_space {
         color.dot(&Vector3::new(0.299, 0.587, 0.114))
     }
 }
+
+// 几何处理模块（网格法线、切线等）
+pub mod geometry;
 
 // 注意：由于 Rust 的孤儿规则，我们不能为 nalgebra 的 Vector 类型实现 bytemuck traits
 // 顶点结构使用原始数组，但提供了 from_vectors() 便利方法来使用 Vector 类型

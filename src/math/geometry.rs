@@ -1,11 +1,13 @@
-/// 几何数学工具模块
-///
-/// 提供网格处理相关的数学函数，包括：
-/// - 法线重建（从三角形面计算顶点法线）
-/// - 切线空间计算（用于法线贴图）
-///
-/// 这些函数用于后处理加载的网格数据。
-use super::vertex::Vertex;
+//! 几何数学工具模块
+//!
+//! 提供网格处理相关的数学函数，包括：
+//! - 法线重建（从三角形面计算顶点法线）
+//! - 切线空间计算（用于法线贴图）
+//! - 法线平滑
+//!
+//! 这些函数用于后处理加载的网格数据。
+
+use crate::geometry::vertex::Vertex;
 
 /// 从三角形面重建顶点法线
 ///
@@ -30,7 +32,7 @@ use super::vertex::Vertex;
 /// # 示例
 ///
 /// ```rust
-/// use distrender::geometry::math_utils::reconstruct_normals;
+/// use distrender::math::geometry::reconstruct_normals;
 /// use distrender::geometry::vertex::Vertex;
 ///
 /// let mut vertices = vec![
@@ -88,6 +90,15 @@ pub fn reconstruct_normals(vertices: &mut [Vertex], indices: &[u32]) {
     }
 }
 
+/// 根据位置平滑法线
+///
+/// 对于位置相近（在epsilon范围内）的顶点，将它们的法线平均化。
+/// 这用于消除硬边，创建平滑的表面。
+///
+/// # 参数
+///
+/// - `vertices`: 顶点数组（可变引用，法线字段将被更新）
+/// - `epsilon`: 位置相似度阈值
 pub fn smooth_normals_by_position(vertices: &mut [Vertex], epsilon: f32) {
     if vertices.is_empty() {
         return;
@@ -164,7 +175,7 @@ pub fn smooth_normals_by_position(vertices: &mut [Vertex], epsilon: f32) {
 /// # 示例
 ///
 /// ```rust
-/// use distrender::geometry::math_utils::compute_tangent_space;
+/// use distrender::math::geometry::compute_tangent_space;
 /// use distrender::geometry::vertex::Vertex;
 ///
 /// let mut vertices = vec![
@@ -266,6 +277,10 @@ pub fn compute_tangent_space(vertices: &mut [Vertex], indices: &[u32]) {
     }
 }
 
+// ============================================================================
+// 辅助函数
+// ============================================================================
+
 /// 辅助函数：计算两个3D向量的叉乘
 ///
 /// 返回垂直于两个输入向量的向量，长度等于两向量张成的平行四边形面积。
@@ -301,6 +316,10 @@ fn normalize(v: [f32; 3]) -> [f32; 3] {
         [v[0] * inv_length, v[1] * inv_length, v[2] * inv_length]
     }
 }
+
+// ============================================================================
+// 测试
+// ============================================================================
 
 #[cfg(test)]
 mod tests {

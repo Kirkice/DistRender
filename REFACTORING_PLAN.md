@@ -218,7 +218,7 @@ impl SceneManager {
 ```rust
 // src/gfx/vulkan/renderer.rs
 pub struct Renderer {
-    gfx: VulkanBackend,
+    gfx: VulkanContext,
     // ... 其他字段
     
     // 移除：camera: Camera

@@ -1,13 +1,13 @@
-//! Metal 渲染器实现
+//! Metal 娓叉煋鍣ㄥ疄鐜?
 
 use crate::core::{Config, SceneConfig};
 use crate::core::error::{Result, DistRenderError};
-use crate::gfx::metal::backend::MetalBackend;
+use crate::gfx::metal::context::MetalContext;
 use crate::gfx::GraphicsBackend;
 use crate::renderer::vertex::{MyVertex, convert_geometry_vertex, create_default_triangle};
 use crate::geometry::loaders::ObjLoader;
 use crate::component::{Camera, DirectionalLight};
-use crate::core::math::{Matrix4, Vector3};
+use crate::math::{Matrix4, Vector3};
 use crate::core::input::InputSystem;
 use winit::window::Window;
 use crate::gui::ipc::GuiStatePacket;
@@ -34,7 +34,7 @@ struct Uniforms {
 }
 
 pub struct Renderer {
-    backend: MetalBackend,
+    backend: MetalContext,
     pipeline_state: RenderPipelineState,
     depth_stencil_state: DepthStencilState,
     vertex_buffer: Buffer,
@@ -48,7 +48,7 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(event_loop: &EventLoop<()>, config: &Config, scene: &SceneConfig) -> Result<Self> {
-        let backend = MetalBackend::new(event_loop, config);
+        let backend = MetalContext::new(event_loop, config);
         
         // 1. Load and Compile Shaders from file
         let shader_path = Path::new("src/gfx/metal/shaders/shader.metal");
@@ -336,7 +336,7 @@ impl Renderer {
     }
 }
 
-/// 实现统一的渲染后端接口
+/// 瀹炵幇缁熶竴鐨勬覆鏌撳悗绔帴鍙?
 #[cfg(target_os = "macos")]
 impl crate::renderer::backend_trait::RenderBackend for Renderer {
     fn window(&self) -> &Window {
@@ -359,5 +359,5 @@ impl crate::renderer::backend_trait::RenderBackend for Renderer {
         self.apply_gui_packet(packet)
     }
 
-    // handle_gui_event 使用默认实现（返回 false）
+    // handle_gui_event 浣跨敤榛樿瀹炵幇锛堣繑鍥?false锛?
 }

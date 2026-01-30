@@ -1,9 +1,9 @@
 use std::mem::ManuallyDrop;
 use tracing::{trace, debug, info};
 use winit::event_loop::EventLoop;
-use crate::gfx::Dx12Backend;
+use crate::gfx::Dx12Context;
 use crate::gfx::backend::GraphicsBackend;
-use crate::core::{Config, SceneConfig, Matrix4};
+use crate::core::{Config, SceneConfig};
 use crate::core::error::{Result, DistRenderError, GraphicsError};
 use crate::renderer::vertex::{MyVertex, create_default_triangle, convert_geometry_vertex};
 use crate::renderer::resource::FrameResourcePool;
@@ -11,7 +11,7 @@ use crate::renderer::sync::{FenceManager, FenceValue};
 use crate::gfx::dx12::descriptor::Dx12DescriptorManager;
 use crate::geometry::loaders::{MeshLoader, ObjLoader};
 use crate::component::{Camera, DirectionalLight};
-use crate::core::math::Vector3;
+use crate::math::{Vector3, Matrix4};
 use crate::gui::ipc::GuiStatePacket;
 use std::path::Path;
 use std::f32::consts::PI;
@@ -24,9 +24,9 @@ use windows::Win32::System::Threading::WaitForSingleObject;
 
 const FRAME_COUNT: usize = 2;
 
-/// Uniform Buffer Object - MVP 矩阵数据
+/// Uniform Buffer Object - MVP 閻晠妯€閺佺増宓?
 ///
-/// D3D12 要求常量缓冲区 256 字节对齐
+/// D3D12 鐟曚焦鐪扮敮鎼佸櫤缂傛挸鍟块崠?256 鐎涙濡€靛綊缍?
 #[repr(C, align(256))]
 #[derive(Clone, Copy, Debug)]
 struct UniformBufferObject {
@@ -52,14 +52,14 @@ impl UniformBufferObject {
 }
 
 pub struct Renderer {
-    gfx: Dx12Backend,
+    gfx: Dx12Context,
     root_signature: ID3D12RootSignature,
     pso: ID3D12PipelineState,
-    #[allow(dead_code)]  // 保留供将来使用
+    #[allow(dead_code)]  // 娣囨繄鏆€娓氭稑鐨㈤弶銉ゅ▏閻?
     vertex_buffer: ID3D12Resource,
     vertex_buffer_view: D3D12_VERTEX_BUFFER_VIEW,
     vertex_count: u32,
-    #[allow(dead_code)]  // 保留供将来使用
+    #[allow(dead_code)]  // 娣囨繄鏆€娓氭稑鐨㈤弶銉ゅ▏閻?
     index_buffer: ID3D12Resource,
     index_buffer_view: D3D12_INDEX_BUFFER_VIEW,
     index_count: u32,
@@ -68,33 +68,33 @@ pub struct Renderer {
     command_allocators: [ID3D12CommandAllocator; FRAME_COUNT],
     command_list: ID3D12GraphicsCommandList,
 
-    // 深度/模板缓冲
+    // 濞ｅ崬瀹?濡剝婢樼紓鎾冲暱
     depth_stencil_heap: ID3D12DescriptorHeap,
     depth_stencil_buffer: ID3D12Resource,
 
-    // 使用新的帧资源管理系统（替代fence_values）
+    // 娴ｈ法鏁ら弬鎵畱鐢嗙カ濠ф劗顓搁悶鍡欓兇缂佺噦绱欓弴澶稿敩fence_values閿?
     frame_resource_pool: FrameResourcePool,
-    // 使用新的Fence管理器
+    // 娴ｈ法鏁ら弬鎵畱Fence缁狅紕鎮婇崳?
     fence_manager: FenceManager,
-    // 描述符管理器
+    // 閹诲繗鍫粭锔绢吀閻炲棗娅?
     descriptor_manager: Dx12DescriptorManager,
-    // 常量缓冲区（MVP 矩阵）
+    // 鐢悂鍣虹紓鎾冲暱閸栫尨绱橫VP 閻晠妯€閿?
     constant_buffer: ID3D12Resource,
     constant_buffer_data: *mut u8,
-    // 场景配置
+    // 閸︾儤娅欓柊宥囩枂
     scene: SceneConfig,
-    // 相机组件
+    // 閻╁憡婧€缂佸嫪娆?
     camera: Camera,
-    // 方向光组件
+    // 閺傜懓鎮滈崗澶岀矋娴?
     directional_light: DirectionalLight,
 }
 
 impl Renderer {
     pub fn new(event_loop: &EventLoop<()>, config: &Config, scene: &SceneConfig) -> Result<Self> {
-        let gfx = Dx12Backend::new(event_loop, config);
+        let gfx = Dx12Context::new(event_loop, config);
 
         unsafe {
-            // 1. Root Signature（包含常量缓冲区描述符）
+            // 1. Root Signature閿涘牆瀵橀崥顐㈢埗闁插繒绱﹂崘鎻掑隘閹诲繗鍫粭锔肩礆
             let root_parameters = [
                 D3D12_ROOT_PARAMETER {
                     ParameterType: D3D12_ROOT_PARAMETER_TYPE_CBV,
@@ -130,12 +130,12 @@ impl Renderer {
                 GraphicsError::ResourceCreation(format!("Failed to create root signature: {:?}", e))
             ))?;
 
-            // 2. Shaders（分别读取并编译 vertex.hlsl / fragment.hlsl）
+            // 2. Shaders閿涘牆鍨庨崚顐ヮ嚢閸欐牕鑻熺紓鏍槯 vertex.hlsl / fragment.hlsl閿?
             use std::fs;
             use std::path::PathBuf;
 
-            // Windows 下工作目录可能不是项目根目录，不能直接依赖相对路径。
-            // 用编译期项目根目录（CARGO_MANIFEST_DIR）来定位 shader 文件。
+            // Windows 娑撳浼愭担婊呮窗瑜版洖褰查懗鎴掔瑝閺勵垶銆嶉惄顔界壌閻╊喖缍嶉敍灞肩瑝閼崇晫娲块幒銉ょ贩鐠ф牜娴夌€电鐭惧鍕┾偓?
+            // 閻劎绱拠鎴炴埂妞ゅ湱娲伴弽鍦窗瑜版洩绱機ARGO_MANIFEST_DIR閿涘娼电€规矮缍?shader 閺傚洣娆㈤妴?
             let shader_dir: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("src/gfx/dx12/shaders");
 
@@ -269,14 +269,14 @@ impl Renderer {
             };
             pso_desc.RasterizerState = D3D12_RASTERIZER_DESC {
                 FillMode: D3D12_FILL_MODE_SOLID,
-                CullMode: D3D12_CULL_MODE_BACK,  // 背面剔除
+                CullMode: D3D12_CULL_MODE_BACK,  // 閼冲矂娼伴崜鏃堟珟
                 ..Default::default()
             };
-            // 启用深度测试
+            // 閸氼垳鏁ゅǎ鍗炲濞村鐦?
             pso_desc.DepthStencilState = D3D12_DEPTH_STENCIL_DESC {
                 DepthEnable: true.into(),
                 DepthWriteMask: D3D12_DEPTH_WRITE_MASK_ALL,
-                DepthFunc: D3D12_COMPARISON_FUNC_LESS,  // 深度值小的通过（更近的物体）
+                DepthFunc: D3D12_COMPARISON_FUNC_LESS,  // 濞ｅ崬瀹抽崐鐓庣毈閻ㄥ嫰鈧俺绻冮敍鍫熸纯鏉╂垹娈戦悧鈺€缍嬮敍?
                 StencilEnable: false.into(),
                 StencilReadMask: 0xFF,
                 StencilWriteMask: 0xFF,
@@ -284,7 +284,7 @@ impl Renderer {
                 BackFace: D3D12_DEPTH_STENCILOP_DESC::default(),
             };
             pso_desc.SampleMask = 0xFFFFFFFF;
-            pso_desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;  // 32位浮点深度格式
+            pso_desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;  // 32娴ｅ秵璇為悙瑙勭箒鎼达附鐗稿?
             pso_desc.InputLayout = D3D12_INPUT_LAYOUT_DESC {
                 pInputElementDescs: input_element_descs.as_ptr(),
                 NumElements: input_element_descs.len() as u32,
@@ -296,7 +296,7 @@ impl Renderer {
 
             let pso: ID3D12PipelineState = gfx.device.CreateGraphicsPipelineState(&pso_desc).expect("Failed to create PSO");
 
-            // 5. MyVertex Buffer - 加载 OBJ 模型文件
+            // 5. MyVertex Buffer - 閸旂姾娴?OBJ 濡€崇€烽弬鍥︽
             let obj_path = Path::new("assets/models/sphere.obj");
             let (vertices, indices) = if obj_path.exists() {
                 info!("Loading mesh from: {}", obj_path.display());
@@ -307,7 +307,7 @@ impl Renderer {
                             mesh_data.vertex_count(),
                             mesh_data.index_count()
                         );
-                        // 转换 GeometryVertex 为 MyVertex
+                        // 鏉烆剚宕?GeometryVertex 娑?MyVertex
                         let verts = mesh_data
                             .vertices
                             .iter()
@@ -367,7 +367,7 @@ impl Renderer {
 
             let vertex_count = vertices.len() as u32;
 
-            // 5.5. 创建索引缓冲区（Index Buffer）
+            // 5.5. 閸掓稑缂撶槐銏犵穿缂傛挸鍟块崠鐚寸礄Index Buffer閿?
             let index_data_size = (std::mem::size_of::<u32>() * indices.len()) as u64;
             let index_count = indices.len() as u32;
 
@@ -407,7 +407,7 @@ impl Renderer {
 
             info!("Index buffer created: {} indices", index_count);
 
-            // 5.6. 创建常量缓冲区（Constant Buffer for MVP matrices）
+            // 5.6. 閸掓稑缂撶敮鎼佸櫤缂傛挸鍟块崠鐚寸礄Constant Buffer for MVP matrices閿?
             let constant_buffer_size = std::mem::size_of::<UniformBufferObject>() as u64;
 
             let cb_heap_props = D3D12_HEAP_PROPERTIES {
@@ -436,7 +436,7 @@ impl Renderer {
             ).expect("Failed to create constant buffer");
             let constant_buffer = constant_buffer.unwrap();
 
-            // Map 常量缓冲区以获取 CPU 指针
+            // Map 鐢悂鍣虹紓鎾冲暱閸栬桨浜掗懢宄板絿 CPU 閹稿洭鎷?
             let mut constant_buffer_data = std::ptr::null_mut();
             constant_buffer.Map(0, None, Some(&mut constant_buffer_data)).unwrap();
 
@@ -459,7 +459,7 @@ impl Renderer {
                 bottom: gfx.height as i32,
             };
 
-            // 7. 创建命令对象（双缓冲）
+            // 7. 閸掓稑缂撻崨鎴掓姢鐎电钖勯敍鍫濆蓟缂傛挸鍟块敍?
             #[cfg(debug_assertions)]
             debug!(frame_count = FRAME_COUNT, "Creating command allocators for frame buffering");
 
@@ -478,28 +478,28 @@ impl Renderer {
                     Some(&pso)
                 ).expect("Failed to create CommandList");
 
-            // 初始创建时命令列表是打开状态，需要先关闭
+            // 閸掓繂顫愰崚娑樼紦閺冭泛鎳℃禒銈呭灙鐞涖劍妲搁幍鎾崇磻閻樿埖鈧緤绱濋棁鈧憰浣稿帥閸忔娊妫?
             command_list.Close().expect("Failed to close initial CommandList");
 
-            // 初始化帧资源池（双缓冲，与FRAME_COUNT匹配）
+            // 閸掓繂顫愰崠鏍ф姎鐠у嫭绨Ч鐙呯礄閸欏瞼绱﹂崘璇х礉娑撳锭RAME_COUNT閸栧綊鍘ら敍?
             let frame_resource_pool = FrameResourcePool::double_buffering();
 
-            // 初始化Fence管理器
+            // 閸掓繂顫愰崠鏈廵nce缁狅紕鎮婇崳?
             let fence_manager = FenceManager::new();
 
-            // 初始化描述符管理器
+            // 閸掓繂顫愰崠鏍ㄥ伎鏉╂壆顑佺粻锛勬倞閸?
             let mut descriptor_manager = Dx12DescriptorManager::new();
 
-            // 初始化 RTV 堆（交换链缓冲数量）
+            // 閸掓繂顫愰崠?RTV 閸棴绱欐禍銈嗗床闁惧墽绱﹂崘鍙夋殶闁插骏绱?
             descriptor_manager.init_rtv_heap(&gfx.device, FRAME_COUNT as u32)?;
 
-            // 初始化 DSV 堆（至少1个深度缓冲）
+            // 閸掓繂顫愰崠?DSV 閸棴绱欓懛鍐茬毌1娑擃亝绻佹惔锔剧处閸愯绱?
             descriptor_manager.init_dsv_heap(&gfx.device, 1)?;
 
-            // 初始化 SRV/CBV/UAV 堆（预分配128个描述符，参考 DistEngine）
+            // 閸掓繂顫愰崠?SRV/CBV/UAV 閸棴绱欐０鍕瀻闁?28娑擃亝寮挎潻鎵儊閿涘苯寮懓?DistEngine閿?
             descriptor_manager.init_srv_cbv_uav_heap(&gfx.device, 128)?;
 
-            // 创建深度模板堆（单独的堆用于DSV）
+            // 閸掓稑缂撳ǎ鍗炲濡剝婢橀崼鍡礄閸楁洜瀚惃鍕垻閻劋绨珼SV閿?
             let dsv_heap_desc = D3D12_DESCRIPTOR_HEAP_DESC {
                 Type: D3D12_DESCRIPTOR_HEAP_TYPE_DSV,
                 NumDescriptors: 1,
@@ -510,7 +510,7 @@ impl Renderer {
                 .CreateDescriptorHeap(&dsv_heap_desc)
                 .expect("Failed to create DSV heap");
 
-            // 创建深度模板缓冲资源
+            // 閸掓稑缂撳ǎ鍗炲濡剝婢樼紓鎾冲暱鐠у嫭绨?
             let depth_heap_props = D3D12_HEAP_PROPERTIES {
                 Type: D3D12_HEAP_TYPE_DEFAULT,
                 ..Default::default()
@@ -549,7 +549,7 @@ impl Renderer {
             ).expect("Failed to create depth stencil buffer");
             let depth_stencil_buffer = depth_stencil_buffer.unwrap();
 
-            // 创建深度模板视图
+            // 閸掓稑缂撳ǎ鍗炲濡剝婢樼憴鍡楁禈
             gfx.device.CreateDepthStencilView(
                 &depth_stencil_buffer,
                 None,
@@ -564,7 +564,7 @@ impl Renderer {
                 info!("Depth stencil buffer created: {}x{}", gfx.width, gfx.height);
             }
 
-            // 创建相机组件（从场景配置初始化）
+            // 閸掓稑缂撻惄鍛婃簚缂佸嫪娆㈤敍鍫滅矤閸︾儤娅欓柊宥囩枂閸掓繂顫愰崠鏍电礆
             let mut camera = Camera::main_camera();
             camera.set_position(Vector3::new(
                 scene.camera.transform.position[0],
@@ -579,7 +579,7 @@ impl Renderer {
                 scene.camera.far_clip,
             );
 
-            // 如果有旋转，使用 look_at 设置相机朝向
+            // 婵″倹鐏夐張澶嬫鏉烆剨绱濇担璺ㄦ暏 look_at 鐠佸墽鐤嗛惄鍛婃簚閺堟繂鎮?
             let pitch = scene.camera.transform.rotation[0] * PI / 180.0;
             let yaw = scene.camera.transform.rotation[1] * PI / 180.0;
             let forward = Vector3::new(
@@ -592,7 +592,7 @@ impl Renderer {
 
             info!("Camera component initialized at position {:?}", camera.position());
 
-            // 初始化方向光组件
+            // 閸掓繂顫愰崠鏍ㄦ煙閸氭垵鍘滅紒鍕
             let directional_light = scene.light.to_directional_light("MainLight");
             info!(
                 "DirectionalLight component initialized: color={:?}, intensity={}, direction={:?}",
@@ -629,31 +629,31 @@ impl Renderer {
         }
     }
 
-    /// 等待GPU完成所有工作（类似DistEngine的FlushCommandQueue）
+    /// 缁涘绶烥PU鐎瑰本鍨氶幍鈧張澶婁紣娴ｆ粣绱欑猾璁虫妧DistEngine閻ㄥ嚔lushCommandQueue閿?
     ///
-    /// 这是一个阻塞操作，会等待所有提交的GPU命令完成。
-    /// 通常用于清理资源或同步点。
+    /// 鏉╂瑦妲告稉鈧稉顏堟▎婵夌偞鎼锋担婊愮礉娴兼氨鐡戝鍛閺堝褰佹禍銈囨畱GPU閸涙垝鎶ょ€瑰本鍨氶妴?
+    /// 闁艾鐖堕悽銊ょ艾濞撳懐鎮婄挧鍕爱閹存牕鎮撳銉у仯閵?
     pub fn flush(&mut self) -> Result<()> {
         unsafe {
             #[cfg(debug_assertions)]
             debug!("Flushing DX12 command queue...");
 
-            // Signal一个新的fence值
+            // Signal娑撯偓娑擃亝鏌婇惃鍒nce閸?
             let flush_fence = self.fence_manager.next_value();
             self.gfx.command_queue.Signal(&self.gfx.fence, flush_fence.value())
                 .expect("Failed to signal fence");
 
-            // 等待该fence值完成
+            // 缁涘绶熺拠顧琫nce閸婄厧鐣幋?
             if self.gfx.fence.GetCompletedValue() < flush_fence.value() {
                 self.gfx.fence.SetEventOnCompletion(flush_fence.value(), self.gfx.fence_event)
                     .expect("Failed to set fence event");
                 WaitForSingleObject(self.gfx.fence_event, windows::Win32::System::Threading::INFINITE);
             }
 
-            // 更新fence管理器
+            // 閺囧瓨鏌奻ence缁狅紕鎮婇崳?
             self.fence_manager.update_completed_value(flush_fence);
 
-            // 更新所有帧资源为可用
+            // 閺囧瓨鏌婇幍鈧張澶婃姎鐠у嫭绨稉鍝勫讲閻?
             self.frame_resource_pool.update_availability(flush_fence.value());
 
             #[cfg(debug_assertions)]
@@ -668,7 +668,7 @@ impl Renderer {
             #[cfg(debug_assertions)]
             debug!("Resizing swapchain...");
 
-            // 等待 GPU 完成所有工作
+            // 缁涘绶?GPU 鐎瑰本鍨氶幍鈧張澶婁紣娴?
             let fence_value = self.gfx.fence_value;
             self.gfx.command_queue.Signal(&self.gfx.fence, fence_value)
                 .expect("Failed to signal fence for resize");
@@ -683,12 +683,12 @@ impl Renderer {
             #[cfg(debug_assertions)]
             debug!("GPU idle, resizing swap chain buffers...");
 
-            // 获取新的窗口大小
+            // 閼惧嘲褰囬弬鎵畱缁愭褰涙径褍鐨?
             let size = self.gfx.window.inner_size();
             self.gfx.width = size.width;
             self.gfx.height = size.height;
 
-            // 调整交换链大小（会自动释放旧的缓冲区）
+            // 鐠嬪啯鏆ｆ禍銈嗗床闁炬儳銇囩亸蹇ョ礄娴兼俺鍤滈崝銊╁櫞閺€鐐＋閻ㄥ嫮绱﹂崘鎻掑隘閿?
             self.gfx.swap_chain.ResizeBuffers(
                 FRAME_COUNT as u32,
                 size.width,
@@ -697,7 +697,7 @@ impl Renderer {
                 DXGI_SWAP_CHAIN_FLAG(0),
             ).expect("Failed to resize swap chain buffers");
 
-            // 重新创建 RTV
+            // 闁插秵鏌婇崚娑樼紦 RTV
             let rtv_handle = self.gfx.rtv_heap.GetCPUDescriptorHandleForHeapStart();
             for i in 0..FRAME_COUNT {
                 let surface: ID3D12Resource = self.gfx.swap_chain.GetBuffer(i as u32)
@@ -708,7 +708,7 @@ impl Renderer {
                 self.gfx.device.CreateRenderTargetView(&surface, None, handle);
             }
 
-            // 重新创建深度模板缓冲
+            // 闁插秵鏌婇崚娑樼紦濞ｅ崬瀹冲Ο鈩冩緲缂傛挸鍟?
             let depth_heap_props = D3D12_HEAP_PROPERTIES {
                 Type: D3D12_HEAP_TYPE_DEFAULT,
                 ..Default::default()
@@ -747,24 +747,24 @@ impl Renderer {
             ).expect("Failed to create depth stencil buffer during resize");
             self.depth_stencil_buffer = new_depth_buffer.unwrap();
 
-            // 重新创建深度模板视图
+            // 闁插秵鏌婇崚娑樼紦濞ｅ崬瀹冲Ο鈩冩緲鐟欏棗娴?
             self.gfx.device.CreateDepthStencilView(
                 &self.depth_stencil_buffer,
                 None,
                 self.depth_stencil_heap.GetCPUDescriptorHandleForHeapStart(),
             );
 
-            // 更新 viewport 和 scissor rect
+            // 閺囧瓨鏌?viewport 閸?scissor rect
             self.viewport.Width = size.width as f32;
             self.viewport.Height = size.height as f32;
             self.scissor_rect.right = size.width as i32;
             self.scissor_rect.bottom = size.height as i32;
 
-            // 重置 frame index
+            // 闁插秶鐤?frame index
             self.gfx.frame_index = self.gfx.swap_chain.GetCurrentBackBufferIndex() as usize;
 
-            // 清除 fence 值（因为我们等待了所有帧完成）
-            // 重置帧资源池
+            // 濞撳懘娅?fence 閸婄》绱欓崶鐘辫礋閹存垳婊戠粵澶婄窡娴滃棙澧嶉張澶婃姎鐎瑰本鍨氶敍?
+            // 闁插秶鐤嗙敮褑绁┃鎰潨
             self.frame_resource_pool = FrameResourcePool::double_buffering();
             self.fence_manager.reset();
 
@@ -783,7 +783,7 @@ impl Renderer {
                 trace!(frame_index, fence_value = self.gfx.fence_value, completed = completed_value, "Frame state");
             }
 
-            // 使用新的帧资源管理：检查当前帧资源是否可用
+            // 娴ｈ法鏁ら弬鎵畱鐢嗙カ濠ф劗顓搁悶鍡窗濡偓閺屻儱缍嬮崜宥呮姎鐠у嫭绨弰顖氭儊閸欘垳鏁?
             let current_frame_resource = self.frame_resource_pool.get(frame_index)
                 .ok_or_else(|| DistRenderError::Runtime("Invalid frame index".to_string()))?;
             if !current_frame_resource.available {
@@ -792,7 +792,7 @@ impl Renderer {
                 #[cfg(debug_assertions)]
                 debug!(frame_index, fence_value, "Waiting for GPU (frame resource in use)");
 
-                // 等待该帧资源完成
+                // 缁涘绶熺拠銉ユ姎鐠у嫭绨€瑰本鍨?
                 if self.gfx.fence.GetCompletedValue() < fence_value {
                     self.gfx.fence.SetEventOnCompletion(fence_value, self.gfx.fence_event)
                         .expect("Failed to set fence event");
@@ -802,28 +802,28 @@ impl Renderer {
                     debug!(frame_index, "GPU wait completed");
                 }
 
-                // 更新已完成的fence值
+                // 閺囧瓨鏌婂鎻掔暚閹存劗娈慺ence閸?
                 self.fence_manager.update_completed_value(FenceValue::new(self.gfx.fence.GetCompletedValue()));
                 self.frame_resource_pool.update_availability(self.gfx.fence.GetCompletedValue());
             }
 
-            // 重置当前帧的命令分配器和命令列表
+            // 闁插秶鐤嗚ぐ鎾冲鐢呮畱閸涙垝鎶ら崚鍡涘帳閸ｃ劌鎷伴崨鎴掓姢閸掓銆?
             let allocator = &self.command_allocators[frame_index];
             allocator.Reset().expect("Failed to reset CommandAllocator");
             self.command_list.Reset(allocator, Some(&self.pso))
                 .expect("Failed to reset CommandList");
 
-            // 更新相机的宽高比（如果窗口大小改变）
+            // 閺囧瓨鏌婇惄鍛婃簚閻ㄥ嫬顔旀妯荤槷閿涘牆顩ч弸婊呯崶閸欙絽銇囩亸蹇旀暭閸欐﹫绱?
             let aspect_ratio = self.viewport.Width / self.viewport.Height;
             self.camera.set_aspect(aspect_ratio);
 
-            // 计算 MVP 矩阵（使用 Camera 组件）
+            // 鐠侊紕鐣?MVP 閻晠妯€閿涘牅濞囬悽?Camera 缂佸嫪娆㈤敍?
             let model = self.scene.model.transform.to_matrix();
             let view = self.camera.view_matrix();
             let mut projection = self.camera.proj_matrix();
             projection[(1, 1)] *= -1.0;
             
-            // 使用 DirectionalLight 组件获取灯光参数
+            // 娴ｈ法鏁?DirectionalLight 缂佸嫪娆㈤懢宄板絿閻忣垰鍘滈崣鍌涙殶
             let light_direction = self.directional_light.direction;
             let light_color_intensity = self.directional_light.color.with_intensity(self.directional_light.intensity);
 
@@ -837,7 +837,7 @@ impl Renderer {
                 [camera_pos.x, camera_pos.y, camera_pos.z],
             );
 
-            // 更新常量缓冲区数据
+            // 閺囧瓨鏌婄敮鎼佸櫤缂傛挸鍟块崠鐑樻殶閹?
             std::ptr::copy_nonoverlapping(
                 &ubo as *const UniformBufferObject as *const u8,
                 self.constant_buffer_data,
@@ -863,7 +863,7 @@ impl Renderer {
             };
             self.command_list.ResourceBarrier(&[barrier]);
 
-            // 设置渲染目标和深度模板
+            // 鐠佸墽鐤嗗〒鍙夌厠閻╊喗鐖ｉ崪灞剧箒鎼达附膩閺?
             let rtv_handle = D3D12_CPU_DESCRIPTOR_HANDLE {
                 ptr: self.gfx.rtv_heap.GetCPUDescriptorHandleForHeapStart().ptr + (self.gfx.frame_index * self.gfx.rtv_descriptor_size),
             };
@@ -871,12 +871,12 @@ impl Renderer {
 
             self.command_list.OMSetRenderTargets(1, Some(&rtv_handle), false, Some(&dsv_handle));
 
-            // 清空渲染目标和深度缓冲
+            // 濞撳懐鈹栧〒鍙夌厠閻╊喗鐖ｉ崪灞剧箒鎼达妇绱﹂崘?
             self.command_list.ClearRenderTargetView(rtv_handle, &self.scene.clear_color, None);
             self.command_list.ClearDepthStencilView(
                 dsv_handle,
                 D3D12_CLEAR_FLAG_DEPTH,
-                1.0,  // 深度清空为1.0（最远）
+                1.0,  // 濞ｅ崬瀹冲〒鍛敄娑?.0閿涘牊娓舵潻婊愮礆
                 0,
                 None,
             );
@@ -887,7 +887,7 @@ impl Renderer {
             self.command_list.RSSetViewports(&[self.viewport]);
             self.command_list.RSSetScissorRects(&[self.scissor_rect]);
 
-            // 设置常量缓冲区（Root Parameter 0）
+            // 鐠佸墽鐤嗙敮鎼佸櫤缂傛挸鍟块崠鐚寸礄Root Parameter 0閿?
             self.command_list.SetGraphicsRootConstantBufferView(
                 0,  // Root parameter index
                 self.constant_buffer.GetGPUVirtualAddress()
@@ -934,7 +934,7 @@ impl Renderer {
             #[cfg(debug_assertions)]
             trace!(frame_index, "Presented");
 
-            // 使用新的 Fence 管理器提交信号
+            // 娴ｈ法鏁ら弬鎵畱 Fence 缁狅紕鎮婇崳銊﹀絹娴溿倓淇婇崣?
             let fence_value = self.fence_manager.next_value();
             self.gfx.command_queue.Signal(&self.gfx.fence, fence_value.value())
                 .expect("Failed to signal fence");
@@ -942,12 +942,12 @@ impl Renderer {
             #[cfg(debug_assertions)]
             trace!(frame_index, fence_value = fence_value.value(), "Fence signaled");
 
-            // 标记当前帧资源为使用中
+            // 閺嶅洩顔囪ぐ鎾冲鐢嗙カ濠ф劒璐熸担璺ㄦ暏娑?
             if let Some(frame_resource) = self.frame_resource_pool.get_mut(frame_index) {
                 frame_resource.mark_in_use(fence_value.value());
             }
 
-            // 保持与 gfx.fence_value 的同步（为了兼容性）
+            // 娣囨繃瀵旀稉?gfx.fence_value 閻ㄥ嫬鎮撳銉礄娑撹桨绨￠崗鐓庮啇閹嶇礆
             self.gfx.fence_value = fence_value.value() + 1;
 
             // Update frame index
@@ -997,7 +997,7 @@ impl Renderer {
     }
 }
 
-/// 实现统一的渲染后端接口
+/// 鐎圭偟骞囩紒鐔剁閻ㄥ嫭瑕嗛弻鎾虫倵缁旑垱甯撮崣?
 #[cfg(target_os = "windows")]
 impl crate::renderer::backend_trait::RenderBackend for Renderer {
     fn window(&self) -> &winit::window::Window {
@@ -1020,13 +1020,13 @@ impl crate::renderer::backend_trait::RenderBackend for Renderer {
         self.apply_gui_packet(packet)
     }
 
-    // handle_gui_event 使用默认实现（返回 false）
+    // handle_gui_event 娴ｈ法鏁ゆ妯款吇鐎圭偟骞囬敍鍫ｇ箲閸?false閿?
 }
 
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
-            // Unmap 常量缓冲区
+            // Unmap 鐢悂鍣虹紓鎾冲暱閸?
             self.constant_buffer.Unmap(0, None);
             debug!("DX12 Renderer dropped, constant buffer unmapped");
         }

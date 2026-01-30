@@ -6,11 +6,11 @@
 //! - Descriptor: Vulkan 描述符管理
 //! - Shaders: Vulkan shader 加载
 
-pub mod backend;
+pub mod context;
 pub mod renderer;
 pub mod descriptor;
 pub mod shaders;
 
 // 重新导出常用类型
-pub use backend::VulkanBackend;
+pub use context::VulkanContext;
 pub use renderer::Renderer;

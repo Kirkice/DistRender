@@ -1,19 +1,19 @@
-//! Vulkan 图形后端实现
+//! Vulkan 鍥惧舰鍚庣瀹炵幇
 //!
-//! 本模块提供了基于 Vulkan API 的图形后端实现。
-//! Vulkan 是一个跨平台的现代图形和计算 API，提供了对 GPU 的底层访问能力。
+//! 鏈ā鍧楁彁渚涗簡鍩轰簬 Vulkan API 鐨勫浘褰㈠悗绔疄鐜般€?
+//! Vulkan 鏄竴涓法骞冲彴鐨勭幇浠ｅ浘褰㈠拰璁＄畻 API锛屾彁渚涗簡瀵?GPU 鐨勫簳灞傝闂兘鍔涖€?
 //!
-//! # 主要组件
+//! # 涓昏缁勪欢
 //!
-//! - `VulkanBackend`：Vulkan 后端的主要结构体，封装了设备、队列、分配器等核心资源
+//! - `VulkanContext`锛歏ulkan 鍚庣鐨勪富瑕佺粨鏋勪綋锛屽皝瑁呬簡璁惧銆侀槦鍒椼€佸垎閰嶅櫒绛夋牳蹇冭祫婧?
 //!
-//! # 初始化流程
+//! # 鍒濆鍖栨祦绋?
 //!
-//! 1. 创建 Vulkan 实例
-//! 2. 创建窗口表面（Surface）
-//! 3. 选择物理设备
-//! 4. 创建逻辑设备和队列
-//! 5. 创建内存和命令缓冲分配器
+//! 1. 鍒涘缓 Vulkan 瀹炰緥
+//! 2. 鍒涘缓绐楀彛琛ㄩ潰锛圫urface锛?
+//! 3. 閫夋嫨鐗╃悊璁惧
+//! 4. 鍒涘缓閫昏緫璁惧鍜岄槦鍒?
+//! 5. 鍒涘缓鍐呭瓨鍜屽懡浠ょ紦鍐插垎閰嶅櫒
 
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -34,74 +34,74 @@ use winit::dpi::LogicalSize;
 use crate::gfx::backend::GraphicsBackend;
 use crate::core::Config;
 
-/// Vulkan 图形后端
+/// Vulkan 鍥惧舰鍚庣
 ///
-/// 封装了 Vulkan 图形 API 的核心资源和功能。
-/// 包括实例、设备、队列、内存分配器等，为渲染器提供底层支持。
+/// 灏佽浜?Vulkan 鍥惧舰 API 鐨勬牳蹇冭祫婧愬拰鍔熻兘銆?
+/// 鍖呮嫭瀹炰緥銆佽澶囥€侀槦鍒椼€佸唴瀛樺垎閰嶅櫒绛夛紝涓烘覆鏌撳櫒鎻愪緵搴曞眰鏀寔銆?
 ///
-/// # 字段说明
+/// # 瀛楁璇存槑
 ///
-/// - `instance`：Vulkan 实例，是使用 Vulkan 的入口点
-/// - `device`：逻辑设备，用于创建和管理 GPU 资源
-/// - `queue`：命令队列，用于提交渲染命令到 GPU
-/// - `surface`：窗口表面，连接窗口系统和 Vulkan
-/// - `memory_allocator`：内存分配器，管理 GPU 内存
-/// - `command_buffer_allocator`：命令缓冲分配器，管理命令缓冲区
-pub struct VulkanBackend {
-    /// Vulkan 实例
-    #[allow(dead_code)]  // 保留供将来使用
+/// - `instance`锛歏ulkan 瀹炰緥锛屾槸浣跨敤 Vulkan 鐨勫叆鍙ｇ偣
+/// - `device`锛氶€昏緫璁惧锛岀敤浜庡垱寤哄拰绠＄悊 GPU 璧勬簮
+/// - `queue`锛氬懡浠ら槦鍒楋紝鐢ㄤ簬鎻愪氦娓叉煋鍛戒护鍒?GPU
+/// - `surface`锛氱獥鍙ｈ〃闈紝杩炴帴绐楀彛绯荤粺鍜?Vulkan
+/// - `memory_allocator`锛氬唴瀛樺垎閰嶅櫒锛岀鐞?GPU 鍐呭瓨
+/// - `command_buffer_allocator`锛氬懡浠ょ紦鍐插垎閰嶅櫒锛岀鐞嗗懡浠ょ紦鍐插尯
+pub struct VulkanContext {
+    /// Vulkan 瀹炰緥
+    #[allow(dead_code)]  // 淇濈暀渚涘皢鏉ヤ娇鐢?
     pub instance: Arc<Instance>,
-    /// 逻辑设备
+    /// 閫昏緫璁惧
     pub device: Arc<Device>,
-    /// 命令队列
+    /// 鍛戒护闃熷垪
     pub queue: Arc<Queue>,
-    /// 窗口表面
+    /// 绐楀彛琛ㄩ潰
     pub surface: Arc<Surface>,
-    /// 窗口引用
+    /// 绐楀彛寮曠敤
     window: Arc<Window>,
-    /// 内存分配器
+    /// 鍐呭瓨鍒嗛厤鍣?
     pub memory_allocator: Arc<StandardMemoryAllocator>,
-    /// 命令缓冲分配器
+    /// 鍛戒护缂撳啿鍒嗛厤鍣?
     pub command_buffer_allocator: StandardCommandBufferAllocator,
-    /// 描述符集分配器
+    /// 鎻忚堪绗﹂泦鍒嗛厤鍣?
     pub descriptor_allocator: StandardDescriptorSetAllocator,
 }
 
-impl VulkanBackend {
-    /// 创建新的 Vulkan 后端
+impl VulkanContext {
+    /// 鍒涘缓鏂扮殑 Vulkan 鍚庣
     ///
-    /// 初始化 Vulkan 的所有核心组件，包括实例、设备、队列和分配器。
-    /// 会自动选择最合适的物理设备（优先选择独立显卡）。
+    /// 鍒濆鍖?Vulkan 鐨勬墍鏈夋牳蹇冪粍浠讹紝鍖呮嫭瀹炰緥銆佽澶囥€侀槦鍒楀拰鍒嗛厤鍣ㄣ€?
+    /// 浼氳嚜鍔ㄩ€夋嫨鏈€鍚堥€傜殑鐗╃悊璁惧锛堜紭鍏堥€夋嫨鐙珛鏄惧崱锛夈€?
     ///
-    /// # 参数
+    /// # 鍙傛暟
     ///
-    /// * `event_loop` - Winit 事件循环的引用，用于创建窗口表面
-    /// * `config` - 引擎配置，用于设置窗口大小、标题等参数
+    /// * `event_loop` - Winit 浜嬩欢寰幆鐨勫紩鐢紝鐢ㄤ簬鍒涘缓绐楀彛琛ㄩ潰
+    /// * `config` - 寮曟搸閰嶇疆锛岀敤浜庤缃獥鍙ｅぇ灏忋€佹爣棰樼瓑鍙傛暟
     ///
-    /// # 返回值
+    /// # 杩斿洖鍊?
     ///
-    /// 返回初始化完成的 `VulkanBackend` 实例
+    /// 杩斿洖鍒濆鍖栧畬鎴愮殑 `VulkanContext` 瀹炰緥
     ///
     /// # Panics
     ///
-    /// 如果无法加载 Vulkan 库、创建实例、找到合适的设备或创建逻辑设备，会 panic
+    /// 濡傛灉鏃犳硶鍔犺浇 Vulkan 搴撱€佸垱寤哄疄渚嬨€佹壘鍒板悎閫傜殑璁惧鎴栧垱寤洪€昏緫璁惧锛屼細 panic
     ///
-    /// # 示例
+    /// # 绀轰緥
     ///
     /// ```no_run
     /// use winit::event_loop::EventLoop;
-    /// use crate::gfx::VulkanBackend;
+    /// use crate::gfx::VulkanContext;
     /// use crate::core::Config;
     ///
     /// let event_loop = EventLoop::new();
     /// let config = Config::from_file_or_default("config.toml");
-    /// let backend = VulkanBackend::new(&event_loop, &config);
+    /// let backend = VulkanContext::new(&event_loop, &config);
     /// ```
     pub fn new(event_loop: &EventLoop<()>, config: &Config) -> Self {
-        // 1. 加载 Vulkan 库
+        // 1. 鍔犺浇 Vulkan 搴?
         let library = VulkanLibrary::new().expect("Failed to load Vulkan library");
 
-        // 2. 创建 Vulkan 实例（vulkano_win 会自动处理所需的表面扩展）
+        // 2. 鍒涘缓 Vulkan 瀹炰緥锛坴ulkano_win 浼氳嚜鍔ㄥ鐞嗘墍闇€鐨勮〃闈㈡墿灞曪級
         let instance = Instance::new(
             library,
             InstanceCreateInfo {
@@ -121,7 +121,7 @@ impl VulkanBackend {
         #[cfg(debug_assertions)]
         debug!("Vulkan instance created");
 
-        // 3. 创建窗口和表面（使用配置中的窗口参数）
+        // 3. 鍒涘缓绐楀彛鍜岃〃闈紙浣跨敤閰嶇疆涓殑绐楀彛鍙傛暟锛?
         let window = Arc::new(
             WindowBuilder::new()
                 .with_title(format!("{} [{}]", config.window.title, config.graphics.backend.name()))
@@ -131,16 +131,16 @@ impl VulkanBackend {
                 .expect("Failed to create window")
         );
 
-        // 手动创建表面以处理 raw-window-handle 版本不匹配
-        // winit 0.29 使用 raw-window-handle 0.6，vulkano 0.34 使用 0.5
+        // 鎵嬪姩鍒涘缓琛ㄩ潰浠ュ鐞?raw-window-handle 鐗堟湰涓嶅尮閰?
+        // winit 0.29 浣跨敤 raw-window-handle 0.6锛寁ulkano 0.34 浣跨敤 0.5
         let surface = Arc::new(unsafe {
             use raw_window_handle::{HasWindowHandle, RawWindowHandle};
             
             
-            // 获取 winit 0.29 的 window handle (raw-window-handle 0.6)
+            // 鑾峰彇 winit 0.29 鐨?window handle (raw-window-handle 0.6)
             let window_handle = window.as_ref().window_handle().expect("Failed to get window handle");
             
-            // 提取 HWND (Windows) 或其他平台的句柄
+            // 鎻愬彇 HWND (Windows) 鎴栧叾浠栧钩鍙扮殑鍙ユ焺
             #[cfg(target_os = "windows")]
             let (hwnd, _hinstance) = {
                 if let RawWindowHandle::Win32(win32_handle) = window_handle.as_raw() {
@@ -160,7 +160,7 @@ impl VulkanBackend {
                 }
             };
             
-            // 手动创建 VkSurfaceKHR
+            // 鎵嬪姩鍒涘缓 VkSurfaceKHR
             let ash_entry = ash::Entry::load().expect("Failed to load Vulkan entry");
             let ash_instance = ash::Instance::load(
                 ash_entry.static_fn(), 
@@ -210,7 +210,7 @@ impl VulkanBackend {
             #[cfg(target_os = "macos")]
             let surface_api = vulkano::swapchain::SurfaceApi::Metal;
 
-            // 将 ash 的 SurfaceKHR 包装为 vulkano Surface  
+            // 灏?ash 鐨?SurfaceKHR 鍖呰涓?vulkano Surface  
             Surface::from_handle(
                 instance.clone(),
                 vk_surface,
@@ -228,8 +228,8 @@ impl VulkanBackend {
             ..DeviceExtensions::empty()
         };
 
-        // 5. 选择物理设备和队列族
-        // 优先级：独立显卡 > 集成显卡 > 虚拟显卡 > CPU > 其他
+        // 5. 閫夋嫨鐗╃悊璁惧鍜岄槦鍒楁棌
+        // 浼樺厛绾э細鐙珛鏄惧崱 > 闆嗘垚鏄惧崱 > 铏氭嫙鏄惧崱 > CPU > 鍏朵粬
         let (physical_device, queue_family_index) = instance
             .enumerate_physical_devices()
             .expect("Failed to enumerate physical devices")
@@ -270,7 +270,7 @@ impl VulkanBackend {
             "Using device"
         );
 
-        // 6. 创建逻辑设备和队列
+        // 6. 鍒涘缓閫昏緫璁惧鍜岄槦鍒?
         let (device, mut queues) = Device::new(
             physical_device,
             DeviceCreateInfo {
@@ -289,7 +289,7 @@ impl VulkanBackend {
 
         let queue = queues.next().expect("Failed to get queue");
 
-        // 7. 创建分配器
+        // 7. 鍒涘缓鍒嗛厤鍣?
         let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
         let command_buffer_allocator = StandardCommandBufferAllocator::new(
             device.clone(),
@@ -318,9 +318,9 @@ impl VulkanBackend {
     }
 }
 
-impl GraphicsBackend for VulkanBackend {
+impl GraphicsBackend for VulkanContext {
     fn new(event_loop: &EventLoop<()>, config: &Config) -> Self {
-        VulkanBackend::new(event_loop, config)
+        VulkanContext::new(event_loop, config)
     }
 
     fn window(&self) -> &Window {

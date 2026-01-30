@@ -5,10 +5,13 @@
 //!
 //! # 模块结构
 //!
-//! - `core`: 核心功能模块（数学、日志、配置、错误处理、事件系统）
+//! - `math`: 数学库模块（向量、矩阵、四元数、几何处理）
+//! - `core`: 核心功能模块（日志、配置、错误处理、事件系统、场景）
 //! - `geometry`: 几何体加载模块（顶点、网格、OBJ/FBX加载器）
-//! - `renderer`: 渲染器模块（Vulkan 和 DX12 实现）
-//! - `gfx`: 图形后端抽象层
+//! - `component`: 组件系统（Transform、Camera、Light）
+//! - `renderer`: 渲染器模块（统一接口和资源管理）
+//! - `gfx`: 图形后端抽象层（Vulkan、DX12、Metal、wgpu）
+//! - `gui`: GUI 模块（外部 GUI 和性能监控）
 //!
 //! # 使用示例
 //!
@@ -27,8 +30,7 @@
 //!     true
 //! });
 //! ```
-
-pub mod core;
+pub mod math;pub mod core;
 pub mod geometry;
 pub mod component;
 pub mod gui;

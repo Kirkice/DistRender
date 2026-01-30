@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use bytemuck::{Pod, Zeroable};
-use crate::core::math::Vector3;
+use crate::math::Vector3;
 
 #[repr(C)]
 #[derive(Default, Clone, Copy, Debug, Pod, Zeroable)]

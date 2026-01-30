@@ -8,8 +8,8 @@
 //! - `backend` - WgpuBackend 结构（设备初始化和管理）
 //! - `renderer` - Renderer 结构（渲染逻辑实现）
 
-mod backend;
+mod context;
 mod renderer;
 
-pub use backend::WgpuBackend;
+pub use context::WgpuContext;
 pub use renderer::Renderer;

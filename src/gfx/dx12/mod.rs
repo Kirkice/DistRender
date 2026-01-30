@@ -5,10 +5,10 @@
 //! - Renderer: DX12 渲染器实现
 //! - Descriptor: DX12 描述符管理
 
-pub mod backend;
+pub mod context;
 pub mod renderer;
 pub mod descriptor;
 
 // 重新导出常用类型
-pub use backend::Dx12Backend;
+pub use context::Dx12Context;
 pub use renderer::Renderer;

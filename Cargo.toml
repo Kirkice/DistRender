@@ -26,36 +26,48 @@ metal = "0.27.0"
 objc = "0.2.7"
 cocoa = "0.25.0"
 block = "0.1.6"
-
-# Core 模块依赖
-# 数学库
-nalgebra = "0.33"
-
-# 日志系统
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-tracing-appender = "0.2"  # 日志文件输出支持
-
-# 配置管理
-serde = { version = "1.0", features = ["derive"] }
-toml = "0.8"
-
-# 错误处理
-anyhow = "1.0"
-
-# 几何加载器
-tobj = "4.0"  # OBJ 文件加载（tinyobjloader Rust 移植）
-# russimp = "2.0"  # Assimp Rust 绑定（支持 FBX 等格式）- Phase 4 将添加
-
-# wgpu 后端依赖
-wgpu = "0.19"          # wgpu 核心库（与 winit 0.29 兼容）
-pollster = "0.3"       # 用于 wgpu 异步初始化的同步执行
-
-# GUI 系统
-egui = "0.26"          # egui 核心库
-egui-wgpu = "0.26"     # egui 的 wgpu 渲染后端
-egui-winit = "0.26"    # egui 的 winit 集成
-
-# 共享内存 IPC
-shared_memory = "0.12" # 用于进程间共享数据
 core-graphics-types = "0.1"
+
+[dependencies.nalgebra]
+version = "0.33"
+
+[dependencies.tracing]
+version = "0.1"
+
+[dependencies.tracing-subscriber]
+version = "0.3"
+features = ["env-filter", "fmt"]
+
+[dependencies.tracing-appender]
+version = "0.2"
+
+[dependencies.serde]
+version = "1.0"
+features = ["derive"]
+
+[dependencies.toml]
+version = "0.8"
+
+[dependencies.anyhow]
+version = "1.0"
+
+[dependencies.tobj]
+version = "4.0"
+
+[dependencies.wgpu]
+version = "0.19"
+
+[dependencies.pollster]
+version = "0.3"
+
+[dependencies.egui]
+version = "0.26"
+
+[dependencies.egui-wgpu]
+version = "0.26"
+
+[dependencies.egui-winit]
+version = "0.26"
+
+[dependencies.shared_memory]
+version = "0.12"

@@ -16,9 +16,9 @@ pub mod wgpu;
 pub mod metal;
 
 pub use backend::GraphicsBackend;
-pub use vulkan::VulkanBackend;
+pub use vulkan::VulkanContext;
 #[cfg(target_os = "windows")]
-pub use dx12::Dx12Backend;
+pub use dx12::Dx12Context;
 #[cfg(target_os = "macos")]
-pub use metal::MetalBackend;
+pub use metal::MetalContext;
 

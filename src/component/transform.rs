@@ -4,7 +4,7 @@
 //! 管理游戏对象的位置、旋转和缩放
 
 use super::Component;
-use crate::core::math::{Vector3, Matrix4, Quaternion};
+use crate::math::{Vector3, Matrix4, Quaternion};
 
 /// Transform 组件
 ///
