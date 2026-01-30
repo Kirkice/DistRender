@@ -616,7 +616,6 @@ impl Renderer {
         // Vulkan 的 NDC 坐标系 Y 轴与 DX12 相反，需要翻转
         // nalgebra 生成的是 OpenGL 风格的投影矩阵（Y 向上）
         // Vulkan 的 Y 轴向下，所以需要翻转投影矩阵的 Y 分量
-        projection[(1, 1)] *= -1.0;
 
         // 使用 DirectionalLight 组件获取光照参数
         let light_direction = self.directional_light.direction;

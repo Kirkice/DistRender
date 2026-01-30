@@ -820,8 +820,9 @@ impl Renderer {
             // 计算 MVP 矩阵（使用 Camera 组件）
             let model = self.scene.model.transform.to_matrix();
             let view = self.camera.view_matrix();
-            let projection = self.camera.proj_matrix();
-
+            let mut projection = self.camera.proj_matrix();
+            projection[(1, 1)] *= -1.0;
+            
             // 使用 DirectionalLight 组件获取灯光参数
             let light_direction = self.directional_light.direction;
             let light_color_intensity = self.directional_light.color.with_intensity(self.directional_light.intensity);
