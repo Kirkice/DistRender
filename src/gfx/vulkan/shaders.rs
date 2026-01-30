@@ -4,13 +4,13 @@
 pub mod vs {
     vulkano_shaders::shader! {
         ty: "vertex",
-        path: "src/renderer/shaders/vertex.glsl",
+        path: "src/gfx/vulkan/shaders/vertex.glsl",
     }
 }
 
 pub mod fs {
     vulkano_shaders::shader! {
         ty: "fragment",
-        path: "src/renderer/shaders/fragment.glsl",
+        path: "src/gfx/vulkan/shaders/fragment.glsl",
     }
 }

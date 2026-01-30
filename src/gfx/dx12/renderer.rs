@@ -137,7 +137,7 @@ impl Renderer {
             // Windows 下工作目录可能不是项目根目录，不能直接依赖相对路径。
             // 用编译期项目根目录（CARGO_MANIFEST_DIR）来定位 shader 文件。
             let shader_dir: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("src/renderer/shaders");
+                .join("src/gfx/dx12/shaders");
 
             let vs_path = shader_dir.join("vertex.hlsl");
             let ps_path = shader_dir.join("fragment.hlsl");
@@ -995,6 +995,32 @@ impl Renderer {
     pub fn window(&self) -> &winit::window::Window {
         self.gfx.window()
     }
+}
+
+/// 实现统一的渲染后端接口
+#[cfg(target_os = "windows")]
+impl crate::renderer::backend_trait::RenderBackend for Renderer {
+    fn window(&self) -> &winit::window::Window {
+        self.window()
+    }
+
+    fn resize(&mut self) {
+        self.resize()
+    }
+
+    fn draw(&mut self) -> crate::core::error::Result<()> {
+        self.draw()
+    }
+
+    fn update(&mut self, input_system: &mut crate::core::input::InputSystem, delta_time: f32) {
+        self.update(input_system, delta_time)
+    }
+
+    fn apply_gui_packet(&mut self, packet: &GuiStatePacket) {
+        self.apply_gui_packet(packet)
+    }
+
+    // handle_gui_event 使用默认实现（返回 false）
 }
 
 impl Drop for Renderer {

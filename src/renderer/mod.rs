@@ -1,14 +1,21 @@
 //! 渲染器模块
 //!
 //! 本模块提供了统一的渲染接口，封装了不同图形 API 的具体实现。
-//! 应用程序通过这个模块与底层图形 API（Vulkan、DirectX 12）交互，
+//! 应用程序通过这个模块与底层图形 API（Vulkan、DirectX 12、Metal、wgpu）交互，
 //! 而不需要关心具体使用的是哪个图形 API。
 //!
 //! # 架构设计
 //!
 //! - `Renderer`：统一的渲染器接口，对外提供一致的 API
-//! - `Backend`：内部枚举，封装不同的图形后端实现
+//! - `RenderBackend` trait：定义了所有后端必须实现的接口
 //! - 底层实现在 `gfx` 模块中，按 API 分类组织
+//!
+//! # 重构说明
+//!
+//! 此模块已从枚举分发模式重构为 trait object 模式：
+//! - **优势**：添加新方法只需修改 trait 和实现，无需修改此文件
+//! - **性能**：虚函数调用开销可忽略（通常 < 1ns）
+//! - **可维护性**：更符合开闭原则，代码更简洁
 
 use tracing::info;
 use winit::event_loop::EventLoop;
@@ -29,125 +36,147 @@ pub mod resource;
 pub mod sync;
 pub mod command;
 pub mod descriptor;
+pub mod backend_trait;
 
-/// 图形后端枚举
+// 重新导出 trait
+pub use backend_trait::RenderBackend;
+
+/// 渲染器
 ///
-/// 封装不同的图形 API 实现，支持运行时选择使用哪个后端。
-/// 通过枚举模式实现零成本抽象，避免动态分发的性能开销。
-enum Backend {
-    Vulkan(VulkanRenderer),
-    #[cfg(target_os = "windows")]
-    Dx12(Dx12Renderer),
-    Wgpu(WgpuRenderer),
-    #[cfg(target_os = "macos")]
-    Metal(MetalRenderer),
-}
-
+/// 对外提供统一的渲染接口，内部使用 trait object 动态分发到具体的图形后端。
+///
+/// # 示例
+///
+/// ```no_run
+/// # use dist_render::renderer::Renderer;
+/// # use dist_render::core::Config;
+/// # use winit::event_loop::EventLoop;
+/// # let event_loop = EventLoop::new().unwrap();
+/// # let config = Config::default();
+/// # let scene = dist_render::core::SceneConfig::default();
+/// let mut renderer = Renderer::new(&event_loop, &config, &scene)?;
+/// # Ok::<(), dist_render::core::error::DistRenderError>(())
+/// ```
 pub struct Renderer {
-    backend: Backend,
+    backend: Box<dyn RenderBackend>,
 }
 
 impl Renderer {
+    /// 创建新的渲染器实例
+    ///
+    /// 根据配置中指定的图形后端类型，创建对应的渲染器实现。
+    ///
+    /// # 参数
+    ///
+    /// * `event_loop` - winit 事件循环引用
+    /// * `config` - 引擎配置
+    /// * `scene` - 场景配置
+    ///
+    /// # 返回值
+    ///
+    /// 成功时返回渲染器实例，失败时返回错误
     pub fn new(event_loop: &EventLoop<()>, config: &Config, scene: &crate::core::SceneConfig) -> Result<Self> {
         use crate::core::config::GraphicsBackend as GfxBackend;
         
-        let backend = match config.graphics.backend {
+        let backend: Box<dyn RenderBackend> = match config.graphics.backend {
             GfxBackend::Wgpu => {
                 info!("Initializing wgpu Backend");
-                let renderer = WgpuRenderer::new(event_loop, config, scene)?;
-                Backend::Wgpu(renderer)
+                Box::new(WgpuRenderer::new(event_loop, config, scene)?)
             }
             #[cfg(target_os = "windows")]
             GfxBackend::Dx12 => {
                 info!("Initializing DX12 Backend");
-                let renderer = Dx12Renderer::new(event_loop, config, scene)?;
-                Backend::Dx12(renderer)
+                Box::new(Dx12Renderer::new(event_loop, config, scene)?)
             }
             #[cfg(not(target_os = "windows"))]
             GfxBackend::Dx12 => {
-                 return Err(crate::core::error::DistRenderError::Initialization("DX12 backend is only available on Windows".to_string()));
+                return Err(crate::core::error::DistRenderError::Initialization(
+                    "DX12 backend is only available on Windows".to_string()
+                ));
             }
             #[cfg(target_os = "macos")]
             GfxBackend::Metal => {
                 info!("Initializing Metal Backend");
-                let renderer = MetalRenderer::new(event_loop, config, scene)?;
-                Backend::Metal(renderer)
+                Box::new(MetalRenderer::new(event_loop, config, scene)?)
             }
-            // 如果在非 macOS 系统上选择 Metal，回退到 Vulkan 或报错。这里为了简单，如果有 Metal 变体但平台不支持，编译器可能报错如果 variant 被 cfg 不包含。
-            // 但我在 config.rs 里的 GraphicsBackend::Metal 没有加 cfg。
             #[cfg(not(target_os = "macos"))]
             GfxBackend::Metal => {
-                return Err(crate::core::error::DistRenderError::Config("Metal backend is only available on macOS".to_string()));
+                return Err(crate::core::error::DistRenderError::Config(
+                    "Metal backend is only available on macOS".to_string()
+                ));
             }
             GfxBackend::Vulkan => {
                 info!("Initializing Vulkan Backend");
-                let renderer = VulkanRenderer::new(event_loop, config, scene)?;
-                Backend::Vulkan(renderer)
+                Box::new(VulkanRenderer::new(event_loop, config, scene)?)
             }
         };
 
         Ok(Self { backend })
     }
 
+    /// 窗口尺寸变化时调用
+    ///
+    /// 委托给底层图形后端处理交换链重建等操作。
     pub fn resize(&mut self) {
-        match &mut self.backend {
-            Backend::Vulkan(r) => r.resize(),
-            #[cfg(target_os = "windows")]
-            Backend::Dx12(r) => r.resize(),
-            Backend::Wgpu(r) => r.resize(),
-            #[cfg(target_os = "macos")]
-            Backend::Metal(r) => r.resize(),
-        }
+        self.backend.resize()
     }
 
+    /// 渲染一帧
+    ///
+    /// 执行实际的渲染工作并将结果呈现到屏幕。
+    ///
+    /// # 返回值
+    ///
+    /// 成功时返回 `Ok(())`，失败时返回错误
     pub fn draw(&mut self) -> Result<()> {
-        match &mut self.backend {
-            Backend::Vulkan(r) => r.draw(),
-            #[cfg(target_os = "windows")]
-            Backend::Dx12(r) => r.draw(),
-            Backend::Wgpu(r) => r.draw(),
-            #[cfg(target_os = "macos")]
-            Backend::Metal(r) => r.draw(),
-        }
+        self.backend.draw()
     }
 
+    /// 更新渲染器状态
+    ///
+    /// 在每帧渲染前调用，用于处理输入、更新相机等。
+    ///
+    /// # 参数
+    ///
+    /// * `input_system` - 输入系统的可变引用
+    /// * `delta_time` - 距离上一帧的时间间隔（秒）
     pub fn update(&mut self, input_system: &mut crate::core::input::InputSystem, delta_time: f32) {
-        match &mut self.backend {
-            Backend::Vulkan(r) => r.update(input_system, delta_time),
-            #[cfg(target_os = "windows")]
-            Backend::Dx12(r) => r.update(input_system, delta_time),
-            Backend::Wgpu(r) => r.update(input_system, delta_time),
-            #[cfg(target_os = "macos")]
-            Backend::Metal(r) => r.update(input_system, delta_time),
-        }
+        self.backend.update(input_system, delta_time)
     }
 
+    /// 获取窗口引用
+    ///
+    /// # 返回值
+    ///
+    /// 窗口的不可变引用
     pub fn window(&self) -> &winit::window::Window {
-        match &self.backend {
-            Backend::Vulkan(r) => r.window(),
-            #[cfg(target_os = "windows")]
-            Backend::Dx12(r) => r.window(),
-            Backend::Wgpu(r) => r.window(),
-            #[cfg(target_os = "macos")]
-            Backend::Metal(r) => r.window(),
-        }
+        self.backend.window()
     }
 
+    /// 应用 GUI 参数包
+    ///
+    /// 当使用外部 GUI 进程时，通过共享内存传递的参数。
+    ///
+    /// # 参数
+    ///
+    /// * `packet` - GUI 状态参数包
     pub fn apply_gui_packet(&mut self, packet: &GuiStatePacket) {
-        match &mut self.backend {
-            Backend::Vulkan(r) => r.apply_gui_packet(packet),
-            #[cfg(target_os = "windows")]
-            Backend::Dx12(r) => r.apply_gui_packet(packet),
-            Backend::Wgpu(r) => r.apply_gui_packet(packet),
-            #[cfg(target_os = "macos")]
-            Backend::Metal(r) => r.apply_gui_packet(packet),
-        }
+        self.backend.apply_gui_packet(packet)
     }
 
+    /// 处理 GUI 事件
+    ///
+    /// 对于内置 GUI 的后端（如 wgpu + egui），需要将窗口事件传递给 GUI。
+    ///
+    /// # 参数
+    ///
+    /// * `event` - 窗口事件
+    ///
+    /// # 返回值
+    ///
+    /// - `true`: 事件被 GUI 消费，不应继续传播
+    /// - `false`: 事件未被 GUI 消费，应继续处理
     pub fn handle_gui_event(&mut self, event: &winit::event::WindowEvent) -> bool {
-        match &mut self.backend {
-            Backend::Wgpu(r) => r.handle_gui_event(event),
-            _ => false, // Vulkan 和 DX12 使用外部 GUI，不需要处理事件
-        }
+        self.backend.handle_gui_event(event)
     }
 }

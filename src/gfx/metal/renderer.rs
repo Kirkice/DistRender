@@ -51,7 +51,7 @@ impl Renderer {
         let backend = MetalBackend::new(event_loop, config);
         
         // 1. Load and Compile Shaders from file
-        let shader_path = Path::new("src/renderer/shaders/shader.metal");
+        let shader_path = Path::new("src/gfx/metal/shaders/shader.metal");
         let shader_source = std::fs::read_to_string(shader_path)
             .map_err(|e| DistRenderError::Initialization(format!("Failed to load Metal shader file: {}", e)))?;
         
@@ -334,4 +334,30 @@ impl Renderer {
             );
         }
     }
+}
+
+/// 实现统一的渲染后端接口
+#[cfg(target_os = "macos")]
+impl crate::renderer::backend_trait::RenderBackend for Renderer {
+    fn window(&self) -> &Window {
+        self.window()
+    }
+
+    fn resize(&mut self) {
+        self.resize()
+    }
+
+    fn draw(&mut self) -> crate::core::error::Result<()> {
+        self.draw()
+    }
+
+    fn update(&mut self, input_system: &mut InputSystem, delta_time: f32) {
+        self.update(input_system, delta_time)
+    }
+
+    fn apply_gui_packet(&mut self, packet: &GuiStatePacket) {
+        self.apply_gui_packet(packet)
+    }
+
+    // handle_gui_event 使用默认实现（返回 false）
 }

@@ -192,7 +192,7 @@ sudo apt-get install cmake
 ### Metal 后端（macOS）
 
 1. **坐标系统**：Metal 使用 Y-up 坐标系（与 OpenGL 一致），深度范围 [0, 1]
-2. **Shader 语言**：使用 Metal Shading Language (MSL)，Shader 文件位于 `src/renderer/shaders/shader.metal`
+2. **Shader 语言**：使用 Metal Shading Language (MSL)，Shader 文件位于 `src/gfx/metal/shaders/shader.metal`
 3. **性能优化**：
    - 已启用三重缓冲（`maximum_drawable_count = 3`）以减少帧延迟
    - Depth correction 矩阵已预计算并缓存

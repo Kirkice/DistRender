@@ -16,8 +16,8 @@
 - ✅ CameraConfig 可以生成投影矩阵 (`projection_matrix(aspect_ratio)`)
 
 ### 3. 着色器更新
-- ✅ Vulkan 顶点着色器支持 3D 位置和 MVP 矩阵（[src/renderer/shaders/vertex.glsl](src/renderer/shaders/vertex.glsl)）
-- ✅ DX12 着色器支持 3D 位置和 MVP 矩阵（[src/renderer/shaders/shader.hlsl](src/renderer/shaders/shader.hlsl)）
+- ✅ Vulkan 顶点着色器支持 3D 位置和 MVP 矩阵（[src/gfx/vulkan/shaders/vertex.glsl](src/gfx/vulkan/shaders/vertex.glsl)）
+- ✅ DX12 着色器支持 3D 位置和 MVP 矩阵（[src/gfx/dx12/shaders/vertex.hlsl](src/gfx/dx12/shaders/vertex.hlsl)）
 - ✅ UniformBufferObject 定义（包含 model, view, projection 矩阵）
 
 ### 4. 顶点结构
@@ -298,6 +298,6 @@ scene.save_to_file("new_scene.toml")?;
 
 - 场景配置：[src/core/scene.rs](src/core/scene.rs)
 - 配置文件：[scene.toml](scene.toml)
-- Vulkan 着色器：[src/renderer/shaders/vertex.glsl](src/renderer/shaders/vertex.glsl)
-- DX12 着色器：[src/renderer/shaders/shader.hlsl](src/renderer/shaders/shader.hlsl)
+- Vulkan 着色器：[src/gfx/vulkan/shaders/vertex.glsl](src/gfx/vulkan/shaders/vertex.glsl)
+- DX12 着色器：[src/gfx/dx12/shaders/vertex.hlsl](src/gfx/dx12/shaders/vertex.hlsl)
 - 顶点结构：[src/renderer/vertex.rs](src/renderer/vertex.rs)

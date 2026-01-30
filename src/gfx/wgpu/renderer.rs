@@ -103,7 +103,7 @@ impl Renderer {
 
         // 2. 加载着色器模块
         debug!("Loading shaders");
-        let shader_source = include_str!("../../renderer/shaders/shader.wgsl");
+        let shader_source = include_str!("shaders/shader.wgsl");
         let shader_module = gfx.device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Main Shader"),
             source: wgpu::ShaderSource::Wgsl(shader_source.into()),
@@ -557,5 +557,32 @@ impl Renderer {
     /// 获取窗口引用
     pub fn window(&self) -> &winit::window::Window {
         self.gfx.window()
+    }
+}
+
+/// 实现统一的渲染后端接口
+impl crate::renderer::backend_trait::RenderBackend for Renderer {
+    fn window(&self) -> &winit::window::Window {
+        self.window()
+    }
+
+    fn resize(&mut self) {
+        self.resize()
+    }
+
+    fn draw(&mut self) -> crate::core::error::Result<()> {
+        self.draw()
+    }
+
+    fn update(&mut self, input_system: &mut InputSystem, delta_time: f32) {
+        self.update(input_system, delta_time)
+    }
+
+    fn apply_gui_packet(&mut self, packet: &GuiStatePacket) {
+        self.apply_gui_packet(packet)
+    }
+
+    fn handle_gui_event(&mut self, event: &winit::event::WindowEvent) -> bool {
+        self.handle_gui_event(event)
     }
 }

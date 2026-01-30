@@ -829,6 +829,31 @@ impl Renderer {
     }
 }
 
+/// 实现统一的渲染后端接口
+impl crate::renderer::backend_trait::RenderBackend for Renderer {
+    fn window(&self) -> &winit::window::Window {
+        self.window()
+    }
+
+    fn resize(&mut self) {
+        self.resize()
+    }
+
+    fn draw(&mut self) -> crate::core::error::Result<()> {
+        self.draw()
+    }
+
+    fn update(&mut self, input_system: &mut crate::core::input::InputSystem, delta_time: f32) {
+        self.update(input_system, delta_time)
+    }
+
+    fn apply_gui_packet(&mut self, packet: &GuiStatePacket) {
+        self.apply_gui_packet(packet)
+    }
+
+    // handle_gui_event 使用默认实现（返回 false）
+}
+
 impl Drop for Renderer {
     fn drop(&mut self) {
         #[cfg(debug_assertions)]

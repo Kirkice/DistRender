@@ -5,8 +5,8 @@
 /// - DX12: Uses HLSL shaders compiled at runtime via D3DCompile
 fn main() {
     // Trigger rebuild if shader files change
-    println!("cargo:rerun-if-changed=src/renderer/shaders/vertex.glsl");
-    println!("cargo:rerun-if-changed=src/renderer/shaders/fragment.glsl");
-    println!("cargo:rerun-if-changed=src/renderer/shaders/vertex.hlsl");
-    println!("cargo:rerun-if-changed=src/renderer/shaders/fragment.hlsl");
+    println!("cargo:rerun-if-changed=src/gfx/vulkan/shaders/vertex.glsl");
+    println!("cargo:rerun-if-changed=src/gfx/vulkan/shaders/fragment.glsl");
+    println!("cargo:rerun-if-changed=src/gfx/dx12/shaders/vertex.hlsl");
+    println!("cargo:rerun-if-changed=src/gfx/dx12/shaders/fragment.hlsl");
 }
