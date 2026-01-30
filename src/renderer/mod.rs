@@ -31,11 +31,8 @@ use crate::gfx::metal::Renderer as MetalRenderer;
 use crate::gui::ipc::GuiStatePacket;
 
 // 通用渲染器组件（与具体 API 无关）
-pub mod vertex;
-pub mod resource;
-pub mod sync;
-pub mod command;
-pub mod descriptor;
+pub mod resources;  // 资源相关：vertex, resource, descriptor
+pub mod commands;   // 命令相关：command, sync
 pub mod backend_trait;
 
 // 重新导出 trait

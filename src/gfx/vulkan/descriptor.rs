@@ -4,7 +4,7 @@
 //! Vulkan 使用描述符池（Descriptor Pool）和描述符集的概念。
 
 use crate::core::error::{Result, DistRenderError, GraphicsError};
-use crate::renderer::descriptor::DescriptorType;
+use crate::renderer::resources::descriptor::DescriptorType;
 use std::sync::Arc;
 use vulkano::descriptor_set::allocator::{StandardDescriptorSetAllocator};
 use vulkano::descriptor_set::layout::{DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, DescriptorType as VkDescriptorType};

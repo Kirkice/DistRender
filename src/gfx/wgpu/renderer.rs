@@ -11,9 +11,9 @@ use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
 use crate::gfx::wgpu::context::WgpuContext;
-use crate::renderer::vertex::{MyVertex, create_default_triangle, convert_geometry_vertex};
-use crate::renderer::resource::FrameResourcePool;
-use crate::renderer::sync::FenceManager;
+use crate::renderer::resources::vertex::{MyVertex, create_default_triangle, convert_geometry_vertex};
+use crate::renderer::resources::resource::FrameResourcePool;
+use crate::renderer::commands::sync::FenceManager;
 use crate::core::{Config, SceneConfig};
 use crate::core::error::{Result, GraphicsError};
 use crate::geometry::loaders::{MeshLoader, ObjLoader};

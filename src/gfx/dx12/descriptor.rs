@@ -4,7 +4,7 @@
 //! 借鉴 DistEngine 的 DescriptorHeap 和 RenderTargetManager 设计。
 
 use crate::core::error::{Result, DistRenderError, GraphicsError};
-use crate::renderer::descriptor::{
+use crate::renderer::resources::descriptor::{
     CpuDescriptorHandle, DescriptorHeapDescriptor, DescriptorManager, DescriptorType,
     GpuDescriptorHandle,
 };

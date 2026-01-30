@@ -27,10 +27,10 @@ use winit::event_loop::EventLoop;
 use winit::window::Window;
 use bytemuck::{Pod, Zeroable};
 
-use crate::renderer::vertex::{MyVertex, create_default_triangle, convert_geometry_vertex};
+use crate::renderer::resources::vertex::{MyVertex, create_default_triangle, convert_geometry_vertex};
 use crate::gfx::vulkan::shaders::{vs, fs};
-use crate::renderer::resource::FrameResourcePool;
-use crate::renderer::sync::FenceManager;
+use crate::renderer::resources::resource::FrameResourcePool;
+use crate::renderer::commands::sync::FenceManager;
 use crate::gfx::vulkan::descriptor::VulkanDescriptorManager;
 use crate::gfx::{GraphicsBackend, VulkanContext as GfxDevice};
 use crate::core::{Config, SceneConfig};

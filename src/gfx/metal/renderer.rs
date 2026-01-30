@@ -4,7 +4,7 @@ use crate::core::{Config, SceneConfig};
 use crate::core::error::{Result, DistRenderError};
 use crate::gfx::metal::context::MetalContext;
 use crate::gfx::GraphicsBackend;
-use crate::renderer::vertex::{MyVertex, convert_geometry_vertex, create_default_triangle};
+use crate::renderer::resources::vertex::{MyVertex, convert_geometry_vertex, create_default_triangle};
 use crate::geometry::loaders::ObjLoader;
 use crate::component::{Camera, DirectionalLight};
 use crate::math::{Matrix4, Vector3};
