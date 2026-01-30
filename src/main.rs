@@ -98,66 +98,65 @@ fn main() {
                 elwt.exit();
             }
             Event::WindowEvent {
-                event: WindowEvent::Resized(_),
+                event: ref window_event,
                 ..
             } => {
-                renderer.resize();
-            }
-            Event::WindowEvent {
-                event:
-                    WindowEvent::KeyboardInput {
-                        event: key_event, ..
-                    },
-                ..
-            } => {
-                if let winit::keyboard::PhysicalKey::Code(keycode) = key_event.physical_key {
-                    input_system.on_keyboard_input(keycode, key_event.state);
+                // wgpu 后端需要先处理 GUI 事件
+                let gui_consumed = if config.graphics.backend.is_wgpu() {
+                    renderer.handle_gui_event(window_event)
+                } else {
+                    false
+                };
+
+                // 如果 GUI 没有消费事件，则处理其他事件
+                if !gui_consumed {
+                    match window_event {
+                        WindowEvent::Resized(_) => {
+                            renderer.resize();
+                        }
+                        WindowEvent::KeyboardInput {
+                            event: key_event, ..
+                        } => {
+                            if let winit::keyboard::PhysicalKey::Code(keycode) = key_event.physical_key {
+                                input_system.on_keyboard_input(keycode, key_event.state);
+                            }
+                        }
+                        WindowEvent::MouseInput { button, state, .. } => {
+                            let window = renderer.window();
+                            input_system.on_mouse_button(window, *button, *state);
+                        }
+                        WindowEvent::CursorMoved { position, .. } => {
+                            input_system.on_mouse_move((position.x, position.y));
+                        }
+                        WindowEvent::Focused(false) => {
+                            let window = renderer.window();
+                            input_system.unlock_cursor(window);
+                            input_system.reset_mouse();
+                        }
+                        WindowEvent::RedrawRequested => {
+                            let now = Instant::now();
+                            let delta_time = now.duration_since(last_frame).as_secs_f32();
+                            last_frame = now;
+
+                            renderer.update(&mut input_system, delta_time);
+
+                            if let Some(gui) = &external_gui {
+                                let packet = gui.read_packet();
+                                renderer.apply_gui_packet(&packet);
+                            }
+
+                            if let Err(e) = renderer.draw() {
+                                error!("Draw failed: {}", e);
+                                eprintln!("Draw failed: {}", e);
+                                elwt.exit();
+                            }
+                        }
+                        _ => (),
+                    }
                 }
-            }
-            Event::WindowEvent {
-                event: WindowEvent::MouseInput { button, state, .. },
-                ..
-            } => {
-                let window = renderer.window();
-                input_system.on_mouse_button(window, button, state);
-            }
-            Event::WindowEvent {
-                event: WindowEvent::CursorMoved { position, .. },
-                ..
-            } => {
-                input_system.on_mouse_move((position.x, position.y));
-            }
-            Event::WindowEvent {
-                event: WindowEvent::Focused(false),
-                ..
-            } => {
-                let window = renderer.window();
-                input_system.unlock_cursor(window);
-                input_system.reset_mouse();
             }
             Event::AboutToWait => {
                 renderer.window().request_redraw();
-            }
-            Event::WindowEvent {
-                event: WindowEvent::RedrawRequested,
-                ..
-            } => {
-                let now = Instant::now();
-                let delta_time = now.duration_since(last_frame).as_secs_f32();
-                last_frame = now;
-
-                renderer.update(&mut input_system, delta_time);
-
-                if let Some(gui) = &external_gui {
-                    let packet = gui.read_packet();
-                    renderer.apply_gui_packet(&packet);
-                }
-
-                if let Err(e) = renderer.draw() {
-                    error!("Draw failed: {}", e);
-                    eprintln!("Draw failed: {}", e);
-                    elwt.exit();
-                }
             }
             _ => (),
         }

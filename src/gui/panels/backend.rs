@@ -7,10 +7,10 @@ use crate::gui::state::GuiState;
 
 /// 渲染后端切换面板
 pub fn render(ui: &mut egui::Ui, state: &mut GuiState) {
-    ui.collapsing("图形后端", |ui| {
-        ui.label(format!("当前后端: {}", state.current_backend));
+    ui.collapsing("Graphics Backend", |ui| {
+        ui.label(format!("Current Backend: {}", state.current_backend));
 
-        ui.label("选择后端:");
+        ui.label("Select Backend:");
         egui::ComboBox::from_label("")
             .selected_text(&state.selected_backend)
             .show_ui(ui, |ui| {
@@ -20,8 +20,8 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState) {
             });
 
         if state.selected_backend != state.current_backend {
-            ui.colored_label(egui::Color32::YELLOW, "⚠ 需要重启应用以应用后端更改");
-            if ui.button("应用并退出").clicked() {
+            ui.colored_label(egui::Color32::YELLOW, "⚠ Restart required to apply backend change");
+            if ui.button("Apply & Exit").clicked() {
                 state.backend_changed = true;
             }
         }

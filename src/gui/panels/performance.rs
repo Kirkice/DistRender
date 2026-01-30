@@ -7,9 +7,9 @@ use crate::gui::state::GuiState;
 
 /// 渲染性能面板
 pub fn render(ui: &mut egui::Ui, state: &GuiState) {
-    ui.collapsing("性能监控", |ui| {
+    ui.collapsing("Performance", |ui| {
         ui.label(format!("FPS: {:.1}", state.fps));
-        ui.label(format!("帧时间: {:.2} ms", state.frame_time_ms));
+        ui.label(format!("Frame Time: {:.2} ms", state.frame_time_ms));
 
         if state.frame_time_ms > 0.0 {
             let target_60fps = 1000.0 / 60.0;
@@ -21,9 +21,9 @@ pub fn render(ui: &mut egui::Ui, state: &GuiState) {
 
             ui.colored_label(color,
                 if state.frame_time_ms <= target_60fps {
-                    "✓ 性能良好"
+                    "✓ Good Performance"
                 } else {
-                    "⚠ 性能警告"
+                    "⚠ Performance Warning"
                 }
             );
         }

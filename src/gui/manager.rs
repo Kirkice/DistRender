@@ -78,7 +78,7 @@ impl GuiManager {
         egui::SidePanel::left("control_panel")
             .default_width(300.0)
             .show(&self.context, |ui| {
-                ui.heading("DistRender 控制面板");
+                ui.heading("DistRender Control Panel");
                 ui.separator();
 
                 // 性能面板

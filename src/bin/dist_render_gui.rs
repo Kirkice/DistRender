@@ -79,7 +79,7 @@ fn main() {
                     egui::SidePanel::left("control_panel")
                         .default_width(330.0)
                         .show(&egui_ctx, |ui| {
-                            ui.heading("DistRender 控制面板");
+                            ui.heading("DistRender Control Panel");
                             ui.separator();
 
                             panels::performance::render(ui, &gui_state);
@@ -95,6 +95,8 @@ fn main() {
                         });
 
                     let full_output = egui_ctx.end_frame();
+                    let shapes = full_output.shapes.clone();
+                    let textures_delta = full_output.textures_delta.clone();
                     egui_state.handle_platform_output(&window, full_output.platform_output);
 
                     // write shared memory
@@ -117,7 +119,8 @@ fn main() {
                         &egui_ctx,
                         &mut egui_state,
                         &mut egui_renderer,
-                        full_output,
+                        shapes,
+                        textures_delta,
                     ) {
                         eprintln!("GUI render error: {e}");
                     }
@@ -170,7 +173,7 @@ impl WgpuGui {
             gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
         });
 
-        let window = std::sync::Arc::new(window);
+        let window = std::sync::Arc::new(unsafe { std::mem::transmute::<_, &'static winit::window::Window>(window) });
         let surface = instance
             .create_surface(window.clone())
             .expect("Failed to create wgpu surface");
@@ -244,7 +247,8 @@ impl WgpuGui {
         egui_ctx: &egui::Context,
         _egui_state: &mut EguiWinitState,
         egui_renderer: &mut EguiWgpuRenderer,
-        full_output: egui::FullOutput,
+        shapes: Vec<egui::epaint::ClippedShape>,
+        textures_delta: egui::TexturesDelta,
     ) -> Result<(), String> {
         let output = self
             .surface
@@ -259,13 +263,13 @@ impl WgpuGui {
             });
 
         let pixels_per_point = window.scale_factor() as f32;
-        let paint_jobs = egui_ctx.tessellate(full_output.shapes, pixels_per_point);
+        let paint_jobs = egui_ctx.tessellate(shapes, pixels_per_point);
         let screen_descriptor = egui_wgpu::ScreenDescriptor {
             size_in_pixels: [window.inner_size().width, window.inner_size().height],
             pixels_per_point,
         };
 
-        for (id, image_delta) in &full_output.textures_delta.set {
+        for (id, image_delta) in &textures_delta.set {
             egui_renderer.update_texture(&self.device, &self.queue, *id, image_delta);
         }
 
@@ -296,7 +300,7 @@ impl WgpuGui {
             egui_renderer.render(&mut rpass, &paint_jobs, &screen_descriptor);
         }
 
-        for id in &full_output.textures_delta.free {
+        for id in &textures_delta.free {
             egui_renderer.free_texture(id);
         }
 

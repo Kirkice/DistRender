@@ -7,7 +7,7 @@
 /// cargo run --example load_obj
 /// ```
 
-use DistRender::geometry::loaders::{MeshLoader, ObjLoader};
+use dist_render::geometry::loaders::{MeshLoader, ObjLoader};
 use std::path::Path;
 
 fn main() {

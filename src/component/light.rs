@@ -518,7 +518,7 @@ mod tests {
         assert_eq!(light.intensity(), 2.0);
 
         light.set_direction(Vector3::new(1.0, -1.0, 0.0));
-        assert!(light.direction.is_some());
+        assert!(light.direction.norm() > 0.0);
     }
 
     #[test]
@@ -543,6 +543,6 @@ mod tests {
         assert!((light.spot_angle_degrees() - 30.0).abs() < 0.001);
 
         light.set_direction(Vector3::new(0.0, 0.0, 1.0));
-        assert!(light.direction.is_some());
+        assert!(light.direction.norm() > 0.0);
     }
 }

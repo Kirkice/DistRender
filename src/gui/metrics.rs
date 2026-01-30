@@ -10,7 +10,8 @@ pub struct PerformanceMetrics {
     last_update: Instant,
     fps: f32,
     frame_time_ms: f32,
-    frame_times: Vec<f32>,  // 用于平滑计算（预留）
+    #[allow(dead_code)]  // 预留用于将来的平滑计算功能
+    frame_times: Vec<f32>,
 }
 
 impl PerformanceMetrics {

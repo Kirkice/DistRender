@@ -99,4 +99,11 @@ impl Renderer {
             Backend::Wgpu(r) => r.apply_gui_packet(packet),
         }
     }
+
+    pub fn handle_gui_event(&mut self, event: &winit::event::WindowEvent) -> bool {
+        match &mut self.backend {
+            Backend::Wgpu(r) => r.handle_gui_event(event),
+            _ => false, // Vulkan 和 DX12 使用外部 GUI，不需要处理事件
+        }
+    }
 }

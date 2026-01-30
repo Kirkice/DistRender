@@ -8,7 +8,7 @@
 //! cargo run --example event_system_demo
 //! ```
 
-use DistRender::core::event::*;
+use dist_render::core::event::*;
 
 fn main() {
     println!("=== DistRender 事件系统演示 ===\n");
