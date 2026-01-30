@@ -507,7 +507,12 @@ impl Renderer {
 
         if self.recreate_swapchain {
             #[cfg(debug_assertions)]
-            debug!("Recreating swapchain...");
+            debug!("Recreating swapchain, waiting for current frame...");
+
+            // 只等待当前帧完成，不使用 flush() 避免阻塞
+            if let Some(ref mut future) = self.previous_frame_end {
+                future.cleanup_finished();
+            }
 
             let result = self.swapchain.recreate(SwapchainCreateInfo {
                 image_extent: dimensions.into(),
@@ -566,8 +571,11 @@ impl Renderer {
             )?;
             self.recreate_swapchain = false;
 
+            // 重置 previous_frame_end 以确保干净的同步状态
+            self.previous_frame_end = Some(sync::now(self.gfx.device.clone()).boxed());
+
             #[cfg(debug_assertions)]
-            debug!("Framebuffers rebuilt");
+            debug!("Framebuffers rebuilt, synchronization reset");
         }
 
         let acquire_result = acquire_next_image(self.swapchain.clone(), None);
@@ -818,6 +826,21 @@ impl Renderer {
                 packet.camera_far,
             );
         }
+    }
+}
+
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        #[cfg(debug_assertions)]
+        debug!("Dropping Vulkan Renderer...");
+        
+        // 只清理 previous_frame_end，不调用 flush 避免卡死
+        if let Some(mut future) = self.previous_frame_end.take() {
+            future.cleanup_finished();
+        }
+        
+        #[cfg(debug_assertions)]
+        debug!("Vulkan Renderer dropped successfully");
     }
 }
 

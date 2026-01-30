@@ -3,10 +3,10 @@
 
 [window]
 # 窗口宽度（像素）
-width = 800
+width = 1280
 
 # 窗口高度（像素）
-height = 600
+height = 720
 
 # 窗口标题
 title = "DistRender"

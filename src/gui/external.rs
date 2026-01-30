@@ -13,6 +13,16 @@ pub struct ExternalGui {
 
 impl ExternalGui {
     pub fn try_start(config: &Config, scene: &SceneConfig) -> Option<Self> {
+        // 先确保旧的 GUI 进程被终止
+        #[cfg(windows)]
+        {
+            let _ = std::process::Command::new("taskkill")
+                .args(&["/F", "/IM", "dist_render_gui.exe"])
+                .output();
+            // 等待进程完全终止和资源释放
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        
         let packet0 = GuiStatePacket {
             clear_color: scene.clear_color,
             light_intensity: scene.light.intensity,
@@ -26,21 +36,38 @@ impl ExternalGui {
         };
 
         let size = SharedGuiState::MAGIC_SIZE;
-        let shmem = match ShmemConf::new().os_id(DEFAULT_SHM_NAME).size(size).create() {
+        
+        // 在 Windows 上，命名共享内存在所有进程关闭后仍然存在
+        // 策略：先尝试打开已存在的，如果不存在则创建新的
+        // 无论哪种情况都重新初始化数据
+        let shmem = match ShmemConf::new().os_id(DEFAULT_SHM_NAME).open() {
             Ok(shmem) => {
+                tracing::debug!("Opened existing shared memory, reinitializing...");
                 unsafe {
                     let ptr = shmem.as_ptr() as *mut SharedGuiState;
                     ptr.write(SharedGuiState::new_init(packet0));
                 }
+                tracing::debug!("Reinitialized existing shared memory");
                 shmem
             }
-            Err(_) => match ShmemConf::new().os_id(DEFAULT_SHM_NAME).open() {
-                Ok(shmem) => shmem,
-                Err(e) => {
-                    tracing::warn!("Failed to create/open shared memory for external GUI: {}", e);
-                    return None;
+            Err(_) => {
+                // 不存在，创建新的
+                tracing::debug!("Creating new shared memory...");
+                match ShmemConf::new().os_id(DEFAULT_SHM_NAME).size(size).create() {
+                    Ok(shmem) => {
+                        unsafe {
+                            let ptr = shmem.as_ptr() as *mut SharedGuiState;
+                            ptr.write(SharedGuiState::new_init(packet0));
+                        }
+                        tracing::debug!("Created new shared memory");
+                        shmem
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to create shared memory: {}", e);
+                        return None;
+                    }
                 }
-            },
+            }
         };
 
         let gui_exe = find_gui_exe();
@@ -75,6 +102,22 @@ impl ExternalGui {
     pub fn read_packet(&self) -> GuiStatePacket {
         let shared = unsafe { &*(self.shmem.as_ptr() as *const SharedGuiState) };
         shared.read_latest()
+    }
+}
+
+impl Drop for ExternalGui {
+    fn drop(&mut self) {
+        tracing::debug!("Dropping ExternalGui, cleaning up resources...");
+        
+        // 终止外部 GUI 进程
+        if let Some(ref mut child) = self.child {
+            let _ = child.kill();
+            let _ = child.wait();
+            tracing::debug!("External GUI process terminated");
+        }
+        
+        // 共享内存会在 Shmem drop 时自动清理
+        tracing::debug!("ExternalGui dropped successfully");
     }
 }
 
