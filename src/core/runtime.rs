@@ -6,6 +6,7 @@ use crate::core::config::GraphicsBackend;
 pub enum RendererBackendKind {
     Vulkan,
     Dx12,
+    Metal,
     Wgpu,
 }
 
@@ -15,6 +16,7 @@ pub fn init_renderer_backend(backend: GraphicsBackend) {
     let kind = match backend {
         GraphicsBackend::Vulkan => RendererBackendKind::Vulkan,
         GraphicsBackend::Dx12 => RendererBackendKind::Dx12,
+        GraphicsBackend::Metal => RendererBackendKind::Metal,
         GraphicsBackend::Wgpu => RendererBackendKind::Wgpu,
     };
 

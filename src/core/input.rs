@@ -145,8 +145,7 @@ impl InputSystem {
         // Handle mouse rotation (right button drag)
         self.handle_mouse_rotation(camera);
 
-        // Reset delta for next frame
-        self.mouse_delta = (0.0, 0.0);
+        // Note: mouse_delta is now reset inside handle_mouse_rotation after use
     }
 
     /// Handle keyboard-based camera movement
@@ -171,6 +170,8 @@ impl InputSystem {
     fn handle_mouse_rotation(&mut self, camera: &mut Camera) {
         // Only rotate if right mouse button is pressed
         if !self.mouse_buttons.contains(&MouseButton::Right) {
+            // Reset delta when not rotating to prevent accumulation
+            self.mouse_delta = (0.0, 0.0);
             return;
         }
 
@@ -186,6 +187,9 @@ impl InputSystem {
 
         camera.pitch(dy);
         camera.rotate_y(dx);
+        
+        // Reset delta after applying rotation
+        self.mouse_delta = (0.0, 0.0);
     }
 
     /// Lock and hide cursor for immersive camera control
@@ -194,8 +198,9 @@ impl InputSystem {
             return;
         }
 
-        // Hide cursor
+        // Always hide cursor and mark as locked, even if grab fails
         window.set_cursor_visible(false);
+        self.cursor_locked = true;
 
         // Try to grab cursor (confine to window)
         // Use Confined mode as it's more widely supported than Locked
@@ -203,16 +208,14 @@ impl InputSystem {
             // Try Locked mode as fallback
             if let Err(e2) = window.set_cursor_grab(winit::window::CursorGrabMode::Locked) {
                 warn!(
-                    "Failed to grab cursor (Confined: {}, Locked: {}). Cursor will remain visible but rotation still works.",
+                    "Failed to grab cursor (Confined: {}, Locked: {}). Cursor hidden but not confined.",
                     e, e2
                 );
             } else {
                 debug!("Cursor grabbed with Locked mode");
-                self.cursor_locked = true;
             }
         } else {
             debug!("Cursor grabbed with Confined mode");
-            self.cursor_locked = true;
         }
     }
 

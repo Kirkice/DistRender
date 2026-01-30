@@ -71,7 +71,7 @@ fn main() {
     let no_external_gui = args.iter().any(|a| a == "--no-external-gui");
     let force_external_gui = args.iter().any(|a| a == "--external-gui");
 
-    let default_external_gui = matches!(config.graphics.backend, GraphicsBackend::Vulkan | GraphicsBackend::Dx12);
+    let default_external_gui = matches!(config.graphics.backend, GraphicsBackend::Vulkan | GraphicsBackend::Dx12 | GraphicsBackend::Metal);
     let use_external_gui = !no_external_gui && (force_external_gui || default_external_gui);
 
     let external_gui = if use_external_gui && !config.graphics.backend.is_wgpu() {

@@ -10,9 +10,15 @@
 
 pub mod backend;
 pub mod vulkan;
+#[cfg(target_os = "windows")]
 pub mod dx12;
 pub mod wgpu;
+pub mod metal;
 
 pub use backend::GraphicsBackend;
 pub use vulkan::VulkanBackend;
+#[cfg(target_os = "windows")]
 pub use dx12::Dx12Backend;
+#[cfg(target_os = "macos")]
+pub use metal::MetalBackend;
+

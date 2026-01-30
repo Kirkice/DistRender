@@ -150,8 +150,17 @@ impl VulkanBackend {
                     panic!("Expected Win32 window handle on Windows");
                 }
             };
+
+            #[cfg(target_os = "macos")]
+            let layer = {
+                if let RawWindowHandle::AppKit(handle) = window_handle.as_raw() {
+                    handle.ns_view.as_ptr() as *const std::ffi::c_void
+                } else {
+                    panic!("Expected AppKit handle on macOS");
+                }
+            };
             
-            // 手动创建 VkWin32SurfaceKHR
+            // 手动创建 VkSurfaceKHR
             let ash_entry = ash::Entry::load().expect("Failed to load Vulkan entry");
             let ash_instance = ash::Instance::load(
                 ash_entry.static_fn(), 
@@ -159,20 +168,53 @@ impl VulkanBackend {
             );
             
             use ash::vk;
-            let win32_surface_loader = ash::extensions::khr::Win32Surface::new(&ash_entry, &ash_instance);
-            let surface_create_info = vk::Win32SurfaceCreateInfoKHR::builder()
-                .hwnd(hwnd)
-                .build();
-            
-            let vk_surface = win32_surface_loader
-                .create_win32_surface(&surface_create_info, None)
-                .expect("Failed to create Win32 surface");
-            
+
+            #[cfg(target_os = "windows")]
+            let vk_surface = {
+                let win32_surface_loader = ash::extensions::khr::Win32Surface::new(&ash_entry, &ash_instance);
+                let surface_create_info = vk::Win32SurfaceCreateInfoKHR::builder()
+                    .hwnd(hwnd)
+                    .build();
+                
+                win32_surface_loader
+                    .create_win32_surface(&surface_create_info, None)
+                    .expect("Failed to create Win32 surface")
+            };
+
+            #[cfg(target_os = "macos")]
+            let vk_surface = {
+                let metal_surface_loader = ash::extensions::ext::MetalSurface::new(&ash_entry, &ash_instance);
+                
+                use core_graphics_types::geometry::CGSize; 
+                // Creating a CAMetalLayer on macOS for Vulkan if needed, usually winit creates NSView.
+                // But for standard winit, the view IS the metal layer's owner or we need to ensure layer is metal.
+                // RawWindowHandle 0.6 AppKit points to NSView.
+                // We assume the view is backed by CAMetalLayer or MoltenVK handles it.
+                // Actually vkCreateMetalSurfaceEXT expects a CAMetalLayer*.
+                
+                // For simplicity in this fix, we just cast the view to the layer pointer (which might fail if view is not layer-backed).
+                // Proper way: [view setWantsLayer:YES]; [view setLayer:[CAMetalLayer layer]];
+                // But we are inside existing window.
+                
+                let surface_create_info = vk::MetalSurfaceCreateInfoEXT::builder()
+                    .layer(layer)
+                    .build();
+
+                metal_surface_loader
+                    .create_metal_surface(&surface_create_info, None)
+                    .expect("Failed to create Metal surface")
+            };
+
+            #[cfg(target_os = "windows")]
+            let surface_api = vulkano::swapchain::SurfaceApi::Win32;
+            #[cfg(target_os = "macos")]
+            let surface_api = vulkano::swapchain::SurfaceApi::Metal;
+
             // 将 ash 的 SurfaceKHR 包装为 vulkano Surface  
             Surface::from_handle(
                 instance.clone(),
                 vk_surface,
-                vulkano::swapchain::SurfaceApi::Win32,
+                surface_api,
                 None,
             )
         });

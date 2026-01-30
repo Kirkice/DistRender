@@ -17,7 +17,15 @@ raw-window-handle = "0.6"
 winit = "0.29"
 image = "0.24"
 bytemuck = { version = "1.14", features = ["derive"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_Dxgi", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D_Fxc", "Win32_System_LibraryLoader", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_Security"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+metal = "0.27.0"
+objc = "0.2.7"
+cocoa = "0.25.0"
+block = "0.1.6"
 
 # Core 模块依赖
 # 数学库
@@ -50,3 +58,4 @@ egui-winit = "0.26"    # egui 的 winit 集成
 
 # 共享内存 IPC
 shared_memory = "0.12" # 用于进程间共享数据
+core-graphics-types = "0.1"

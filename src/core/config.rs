@@ -87,6 +87,8 @@ pub enum GraphicsBackend {
     Vulkan,
     /// DirectX 12 后端
     Dx12,
+    /// Metal 后端
+    Metal,
     /// wgpu 后端（支持 Vulkan、Metal、DX12、OpenGL）
     Wgpu,
 }
@@ -216,6 +218,10 @@ impl Config {
             self.graphics.backend = GraphicsBackend::Wgpu;
         }
 
+        if args.iter().any(|a| a == "--metal") {
+            self.graphics.backend = GraphicsBackend::Metal;
+        }
+
         if let Some(idx) = args.iter().position(|a| a == "--width") {
             if let Some(width_str) = args.get(idx + 1) {
                 if let Ok(width) = width_str.parse() {
@@ -275,6 +281,7 @@ impl GraphicsBackend {
         match self {
             GraphicsBackend::Vulkan => "Vulkan",
             GraphicsBackend::Dx12 => "DirectX 12",
+            GraphicsBackend::Metal => "Metal",
             GraphicsBackend::Wgpu => "wgpu",
         }
     }
