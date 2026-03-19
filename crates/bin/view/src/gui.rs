@@ -803,6 +803,8 @@ impl RuntimeState {
         if delete_selected_game_object {
             persisted.scene.remove_game_object(game_object_id);
             self.selected_game_object = None;
+            self.viewport_click_origin = None;
+            self.viewport_gizmo_drag = None;
         }
 
         if refresh_scene_singletons {
@@ -1206,6 +1208,7 @@ impl RuntimeState {
             self.viewport_camera_matrices(persisted, ctx);
 
         let drag_mask = 1 | (1 << 2);
+        let focus_mask = drag_mask | (1 << 1);
 
         egui::Frame::none()
             .fill(Self::viewport_fill())
@@ -1220,6 +1223,10 @@ impl RuntimeState {
                     egui::Image::new(texture_id, ui.available_size()).sense(egui::Sense::hover()),
                 );
                 self.viewport_hovered = response.hovered();
+
+                if self.viewport_hovered && (self.mouse.buttons_pressed & focus_mask) != 0 {
+                    self.viewport_keyboard_focused = true;
+                }
 
                 let viewport_rect = response.rect;
                 let projected_objects = Self::project_scene_objects(
@@ -1396,13 +1403,17 @@ impl RuntimeState {
 
                 egui::SidePanel::left("hierarchy_panel")
                     .default_width(320.0)
+                    .resizable(true)
+                    .width_range(220.0..=720.0)
                     .frame(egui::Frame::none().fill(Self::panel_fill()))
                     .show(egui_ctx, |ui| {
                         self.draw_hierarchy_panel(ui, persisted);
                     });
 
                 egui::SidePanel::right("inspector_panel")
-                    .default_width(380.0)
+                    .default_width(460.0)
+                    .resizable(true)
+                    .width_range(300.0..=820.0)
                     .frame(egui::Frame::none().fill(Self::panel_fill()))
                     .show(egui_ctx, |ui| {
                         self.draw_inspector_panel(ui, persisted, ctx);
@@ -1414,9 +1425,17 @@ impl RuntimeState {
                     self.draw_viewport_panel(ui, persisted, ctx);
                     });
             });
+
+            if (self.mouse.buttons_pressed & 0b111) != 0
+                && !self.viewport_hovered
+                && !self.viewport_pointer_captured
+            {
+                self.viewport_keyboard_focused = false;
+            }
         } else {
             self.viewport_hovered = true;
             ctx.render_extent = [ctx.window.inner_size().width.max(1), ctx.window.inner_size().height.max(1)];
+            self.viewport_keyboard_focused = false;
             self.viewport_click_origin = None;
             self.viewport_gizmo_drag = None;
         }

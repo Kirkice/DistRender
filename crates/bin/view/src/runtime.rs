@@ -103,6 +103,7 @@ pub struct RuntimeState {
 
     pub viewport_hovered: bool,
     pub viewport_pointer_captured: bool,
+    pub viewport_keyboard_focused: bool,
     pub viewport_click_origin: Option<Vec2>,
     pub viewport_gizmo_drag: Option<ViewportGizmoDragState>,
 
@@ -138,7 +139,7 @@ impl RuntimeState {
             })
     }
 
-    fn active_camera_vertical_fov(scene: &SceneState) -> f32 {
+    pub(crate) fn active_camera_vertical_fov(scene: &SceneState) -> f32 {
         scene
             .with_primary_camera(|_, camera| camera.vertical_fov)
             .unwrap_or_else(|| CameraState::default().vertical_fov)
@@ -252,6 +253,7 @@ impl RuntimeState {
 
             viewport_hovered: false,
             viewport_pointer_captured: false,
+            viewport_keyboard_focused: false,
             viewport_click_origin: None,
             viewport_gizmo_drag: None,
 
@@ -348,9 +350,9 @@ impl RuntimeState {
         self.sync_camera_rig_from_scene(&persisted.scene);
 
         let viewport_input_active = !self.show_gui
+            || self.viewport_keyboard_focused
             || self.viewport_hovered
-            || self.viewport_pointer_captured
-            || (self.mouse.buttons_held & (1 << 2)) != 0;
+            || self.viewport_pointer_captured;
 
         let smooth = self.camera.driver_mut::<Smooth>();
         if ctx.world_renderer.render_mode == RenderMode::Reference {
@@ -449,6 +451,7 @@ impl RuntimeState {
 
     fn update_sun(&mut self, persisted: &mut PersistedState, ctx: &mut FrameContext) {
         let viewport_input_active = !self.show_gui
+            || self.viewport_keyboard_focused
             || self.viewport_hovered
             || self.viewport_pointer_captured;
 
