@@ -1,73 +1,38 @@
-[package]
-name = "dist_render"
-version = "0.1.0"
-edition = "2021"
-authors = ["DistRender Team"]
-description = "A multi-backend rendering engine supporting Vulkan and DirectX 12"
-default-run = "dist_render"
+[workspace]
+resolver = "2"
+members = [
+    "crates/bin/bake",
+    "crates/bin/hello",
+    "crates/bin/view",
 
-[dependencies]
+    "crates/lib/dist-render-asset",
+    "crates/lib/dist-render-asset-pipe",
+    "crates/lib/dist-render-backend",
+    "crates/lib/dist-render-imgui",
+    "crates/lib/dist-render-rg",
+    "crates/lib/dist-render-simple",
+    "crates/lib/dist-render",
+    "crates/lib/rust-shaders",
+    "crates/lib/rust-shaders-shared",
 
-# Vulkan + windowing + image loading
-vulkano = "0.34"
-vulkano-shaders = "0.34"
-vulkano-win = "0.34"
-ash = "0.37"
-raw-window-handle = "0.6"
-winit = "0.29"
-image = "0.24"
-bytemuck = { version = "1.14", features = ["derive"] }
+    "crates/lib/ash-imgui",
+]
 
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_Dxgi", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D_Fxc", "Win32_System_LibraryLoader", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_Security"] }
+exclude = [
+    "crates/bin/rust-shader-builder",
+    "crates/lib/ngx_dlss"
+]
 
-[target.'cfg(target_os = "macos")'.dependencies]
-metal = "0.27.0"
-objc = "0.2.7"
-cocoa = "0.25.0"
-block = "0.1.6"
-core-graphics-types = "0.1"
+[patch.crates-io]
+# Official ray-tracing extensions
+rspirv = { git = "https://github.com/gfx-rs/rspirv.git", rev = "dae552c" }
+spirv_headers = { git = "https://github.com/gfx-rs/rspirv.git", rev = "dae552c" }
 
-[dependencies.nalgebra]
-version = "0.33"
+[profile.release]
+debug = 1
 
-[dependencies.tracing]
-version = "0.1"
+#[patch."https://github.com/h3r2tic/rspirv-reflect"]
+#rspirv-reflect = { path = "../rspirv-reflect" }
 
-[dependencies.tracing-subscriber]
-version = "0.3"
-features = ["env-filter", "fmt"]
-
-[dependencies.tracing-appender]
-version = "0.2"
-
-[dependencies.serde]
-version = "1.0"
-features = ["derive"]
-
-[dependencies.toml]
-version = "0.8"
-
-[dependencies.anyhow]
-version = "1.0"
-
-[dependencies.tobj]
-version = "4.0"
-
-[dependencies.wgpu]
-version = "0.19"
-
-[dependencies.pollster]
-version = "0.3"
-
-[dependencies.egui]
-version = "0.26"
-
-[dependencies.egui-wgpu]
-version = "0.26"
-
-[dependencies.egui-winit]
-version = "0.26"
-
-[dependencies.shared_memory]
-version = "0.12"
+#[patch."https://github.com/h3r2tic/gpu-profiler.git"]
+#gpu-profiler = { path = "../gpu_profiler", features = ["use-ash"] }

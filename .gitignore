@@ -1,45 +1,12 @@
-# Ignore build artifacts
-/target/
-/**/target/
-
-# Cargo generated files
-**/*.rs.bk
-.cargo/
-.rustup/
-*.crate
-*.crates.toml
-*.crates2.json
-
-# Build artifacts and intermediate files
-**/*.rlib
-**/*.rmeta
-**/*.dSYM
-**/*.exe
-**/*.dll
-**/*.so
-**/*.dylib
-**/*.pdb
-
-# Incremental and debug info
-/debug/
-/build/
-/incremental/
-
-# IDE/editor files
-.vscode/
-.idea/
-*.sublime-project
-*.sublime-workspace
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Coverage
-/coverage/
 /target
+/.vscode
+/.idea
+/cache
+/assets/scenes/private-*
+*.blend1
+*.log
+**/*.rs.bk
+imgui.ini
+view_state*.ron
+nvngx*
+nvsdk*

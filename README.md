@@ -1,663 +1,215 @@
-# DistRender
+<!-- Allow this file to not have a first line heading -->
+<!-- markdownlint-disable-file MD041 -->
 
-一个基于 Rust 的现代化跨平台渲染引擎，支持多图形后端（Vulkan、DirectX 12、Metal、wgpu）。
+<!-- inline html -->
+<!-- markdownlint-disable-file MD033 -->
 
-## 📖 项目简介
+<div align="center">
 
-DistRender 是一个模块化的实时渲染引擎，旨在提供统一的图形 API 抽象，让开发者无需关心底层图形 API 的差异。引擎采用 trait-based 设计模式，通过动态分发实现后端切换，同时保持代码的清晰性和可维护性。
+# Dist Render
 
-项目的核心设计理念：
-- **跨平台优先**：一套代码，多个平台
-- **后端无关**：统一接口隐藏图形 API 差异
-- **模块化架构**：组件松耦合，易于扩展和测试
-- **零成本抽象**：Rust 强类型保证 + 编译期优化
+**Experimental real-time global illumination renderer made with Rust and Vulkan**
 
-## ✨ 特性
+[![Embark](https://img.shields.io/badge/embark-open%20source-blueviolet.svg)](https://embark.dev)
+[![Embark](https://img.shields.io/badge/discord-ark-%237289da.svg?logo=discord)](https://discord.gg/dAuKfZS)
+</div>
 
-- 🎨 **多后端支持**：支持 Vulkan（跨平台）、DirectX 12（Windows）、Metal（macOS）与 wgpu（跨平台抽象后端）
-- 🔧 **统一接口**：统一的 `renderer::Renderer` 接口，在运行时选择后端
-- 🎛️ **GUI 系统**：
-  - wgpu 后端：内置 egui 面板
-  - Vulkan/DX12/Metal 后端：外部 GUI 进程（`dist_render_gui`）+ 共享内存同步参数
-- 🖱️ **输入系统**：基于 winit 的键鼠输入，支持 WASD 移动与右键拖拽视角
-- ⚡ **事件系统**：类型安全、零成本抽象的事件处理框架
-- 🛠️ **模块化设计**：清晰的模块划分，易于维护和扩展
+_This project is no longer maintained._
 
-## 🚀 快速开始
+It was a spare-time experiment by one guy who worked at Embark at the time (on non-rendering stuff). If you're looking to learn some artisanal hacks, this might be useful - just don't look too deep into the code 🐙
 
-### 运行主程序（默认）
+Janky as it may have been, boy, did we render! 🪩🥳  _(Click for YouTube vids)_
 
-由于工程包含多个二进制程序（主渲染器 + 外部 GUI），已在 `Cargo.toml` 配置 `default-run = "dist_render"`，因此以下命令会默认运行主程序：
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=_1g-XhlI_5A">
+    <img src="https://img.youtube.com/vi/_1g-XhlI_5A/0.jpg" width="45%" alt="New global illumination in Dist Render 0.2">
+  </a>
+  <a href="https://www.youtube.com/watch?v=e7zTtLm2c8A">
+    <img src="https://img.youtube.com/vi/e7zTtLm2c8A/0.jpg" width="45%" alt="New irradiance cache (Dist Render renderer)">
+  </a>
+</p>
 
-```bash
-cargo run
-```
-
-### 选择图形后端
-
-- Vulkan：
-
-```bash
-cargo run -- --vulkan
-```
-
-- DirectX 12：
-
-```bash
-cargo run -- --dx12
-```
-
-- Metal（macOS）：
-
-```bash
-cargo run -- --metal
-```
-
-- wgpu：
-
-```bash
-cargo run -- --wgpu
-```
-
-### 外部 GUI（仅 Vulkan/DX12/Metal 默认启用）
-
-当使用 Vulkan / DX12 / Metal 后端时，主程序会自动启动外部 GUI 程序 `dist_render_gui`，并通过共享内存把 GUI 参数同步到渲染后端。
-
-你也可以通过命令行控制：
-
-- 强制启用外部 GUI：
-
-```bash
-cargo run -- --external-gui
-```
-
-- 禁用外部 GUI：
-
-```bash
-cargo run -- --no-external-gui
-```
-
-### 单独运行外部 GUI 程序
-
-```bash
-cargo run --bin dist_render_gui
-```
-
-说明：主程序启动外部 GUI 时，会按以下顺序查找可执行文件：
-
-- **优先（B）**：主程序可执行文件同目录下的 `dist_render_gui(.exe)`
-- **兜底（A）**：`target/debug/dist_render_gui(.exe)`
-
-### Release 模式
-
-```bash
-cargo run --release
-```
-
-## 📁 项目结构
-
-```
-DistRender/
-├── src/
-│   ├── main.rs                    # 主渲染程序入口
-│   ├── lib.rs                     # 库入口
-│   ├── bin/
-│   │   └── dist_render_gui.rs     # 外部 GUI 程序
-│   │
-│   ├── math/                      # 数学库（顶层模块）
-│   │   ├── mod.rs                 # 向量、矩阵、四元数、颜色
-│   │   └── geometry.rs            # 几何处理（法线、切线计算）
-│   │
-│   ├── core/                      # 核心系统
-│   │   ├── config.rs              # 配置管理
-│   │   ├── error.rs               # 错误类型定义
-│   │   ├── event.rs               # 事件系统
-│   │   ├── input.rs               # 输入处理
-│   │   ├── log.rs                 # 日志系统
-│   │   ├── runtime.rs             # 运行时管理
-│   │   └── scene.rs               # 场景管理
-│   │
-│   ├── component/                 # 组件系统
-│   │   ├── component.rs           # 组件 trait
-│   │   ├── camera.rs              # 相机组件
-│   │   ├── light.rs               # 光照组件
-│   │   ├── transform.rs           # 变换组件
-│   │   └── game_object.rs         # 游戏对象容器
-│   │
-│   ├── geometry/                  # 几何数据
-│   │   ├── mesh.rs                # 网格数据结构
-│   │   ├── vertex.rs              # 顶点格式
-│   │   └── loaders/               # 模型加载器
-│   │       ├── obj_loader.rs      # Wavefront OBJ
-│   │       └── fbx_loader.rs      # Autodesk FBX
-│   │
-│   ├── renderer/                  # 渲染器层
-│   │   ├── mod.rs                 # 统一 Renderer 接口
-│   │   ├── backend_trait.rs       # RenderBackend trait
-│   │   ├── resources/             # 渲染资源
-│   │   │   ├── vertex.rs          # 顶点格式定义
-│   │   │   ├── resource.rs        # 资源池管理
-│   │   │   └── descriptor.rs      # 描述符管理
-│   │   └── commands/              # 渲染命令
-│   │       ├── command.rs         # 命令缓冲
-│   │       └── sync.rs            # 同步原语（围栏）
-│   │
-│   ├── 
-
-```
-┌───────────────────────────────────────────────────────┐
-│                   Application Layer                  │
-│              (main.rs + Runtime System)              │
-├───────────────────────────────────────────────────────┤
-│                   Renderer Interface                 │
-│           (统一的 Renderer + RenderBackend)           │
-├──────────┬──────────┬──────────┬────────────────────┤
-│  Vulkan  │   DX12   │  Metal   │       wgpu        │
-│ Context  │ Context  │ Context  │      Context      │
-│    +     │    +     │    +     │         +         │
-│ Renderer │ Renderer │ Renderer │     Renderer      │
-└──────────┴──────────┴──────────┴────────────────────┘
-         ↑          ↑          ↑            ↑
-         └──────────┴──────────┴────────────┘
-                 RenderBackend Trait
-```
-
-### 核心设计模式
-
-#### 1. Trait-based Backend Abstraction（trait 后端抽象）
-
-所有图形后端实现统一的 `RenderBackend` trait：
-
-```rust
-pub trait RenderBackend: Send {
-    fn window(&self) -> &Window;
-    fn resize(&mut self);
-    fn draw(&mut self) -> Result<()>;
-    fn update(&mut self, input_system: &mut InputSystem, delta_time: f32);
-    fn apply_gui_packet(&mut self, packet: &GuiStatePacket);
-    // ... 其他方法
-}
-```
-
-**优势**：
-- ✅ 消除了枚举分发的代码重复（从 32 个 match 分支减少为 1 个 trait 调用）
-- ✅ 新增后端只需实现 trait，无需修改上层代码
-- ✅ 编译期类型检查保证接口一致性
-
-#### 2. Component System（组件系统）
-
-基于 trait 的组件系统，支持动态类型组合：
-
-```rust
-pub trait Component: Any {
-    fn name(&self) -> &str;
-    fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&mut self) -> &mut dyn Any;
-}
-
-pub struct GameObject {
-    components: HashMap<TypeId, Vec<Box<dyn Component>>>,
-    // ...
-}
-```
-
-**特性**：
-- ✅ 类型安全的组件获取（通过 `TypeId`）
-- ✅ 支持同一类型的多个组件实例
-- ✅ 零成本的类型转换（`downcast_ref`）
-
-#### 3. Event System（事件系统）
-
-类型安全的事件处理框架：
-
-```rust
-pub trait Event: Any {
-    fn name(&self) -> &'static str;
-    fn category(&self) -> EventCategory;
-}
-
-pub trait EventHandler<E: Event> {
-    fn on_event(&mut self, event: &E) -> bool;
-}
-```
-
-**特性**：
-- ✅ 编译期类型检查
-- ✅ 支持事件处理链
-- ✅ 零成本抽象（内联优化）
-
-#### 4. Resource Management（资源管理）
-
-分层的资源管理策略：
-
-- **FrameResourcePool**：帧内资源复用（三重缓冲）
-- **DescriptorManager**：描述符分配和管理
-- **FenceManager**：GPU 同步管理
-
-### 模块依赖关系
-
-```
-main.rs
-  ├─→ core::Runtime
-  │     ├─→ core::Config
-  │     ├─→ core::InputSystem
-  │     └─→ core::EventDispatcher
-  │
-  ├─→ renderer::Renderer
-  │     ├─→ renderer::RenderBackend (trait)
-  │     │     ├─→ gfx::vulkan::Renderer
-  │     │     ├─→ gfx::dx12::Renderer
-  │     │     ├─→ gfx::metal::Renderer
-  │     │     └─→ gfx::wgpu::Renderer
-  │     │
-  │     ├─→ renderer::resources::*
-  │     └─→ renderer::commands::*
-  │
-  ├─→ gui::GuiManager
-  │     ├─→ gui::ipc (外部 GUI 通信)
-  │     └─→ egui (wgpu 内置 GUI)
-  │
-  └─→ component::Camera
-        └─→ component::Transform
-```
-
-### 关键技术实现
-
-#### Shader 管理
-
-- **编译期编译**：通过 `build.rs` 在构建时编译所有着色器
-- **后端特定**：每个后端有独立的着色器目录（GLSL/HLSL/MSL/WGSL）
-- **嵌入二进制**：编译后的着色器嵌入可执行文件
-
-#### 跨平台窗口
-
-- **winit**：统一的窗口和事件循环抽象
-- **raw-window-handle**：平台无关的窗口句柄传递
-
-#### 进程间通信（IPC）
-
-外部 GUI 使用共享内存与主进程通信：
-
-```rust
-pub struct GuiStatePacket {
-    pub camera_params: CameraParams,
-    pub light_params: LightParams,
-    pub render_params: RenderParams,
-    // ...
-}
-```
-
-- **平台抽象**：使用 `shared_memory` crate
-- **无锁设计**：原子操作保证数据一致性
-- **低延迟**：< 1ms 的参数同步延迟 │   │   ├── descriptor.rs      # 描述符堆管理
-│   │   │   └── shaders/           # DX12 着色器（HLSL）
-│   │   ├── metal/                 # Metal 实现
-│   │   │   ├── context.rs         # 设备上下文
-│   │   │   ├── renderer.rs        # 渲染器
-│   │   │   └── shaders/           # Metal 着色器（MSL）
-│   │   └── wgpu/                  # wgpu 实现
-│   │       ├── context.rs         # 设备上下文
-│   │       ├── renderer.rs        # 渲染器
-│   │       └── shaders/           # wgpu 着色器（WGSL）
-### 核心依赖
-
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| **vulkano** | 0.34 | Vulkan 高级封装 |
-| **ash** | 0.38 | Vulkan 低级绑定 |
-| **windows** | 0.62.2 | DirectX 12 绑定 |
-| **metal** | 0.27.0 | Metal API 绑定 (macOS) |
-| **wgpu** | 0.19 | 跨平台图形抽象 |
-| **winit** | 0.29 | 窗口和事件管理 |
-| **nalgebra** | 0.33 | 线性代数库 |
-| **egui** | 0.26 | 即时模式 GUI |
-| **tracing** | 0.1 | 结构化日志 |
-| **anyhow** | 1.0 | 错误处理 |
-| **serde** | 1.0 | 序列化/反序列化 |
-| **shared_memory** | 0.12 | 跨进程共享内存 |
-
-### 构建工具
-
-- **shaderc**：GLSL/HLSL 着色器编译
-- **spirv-cross**：着色器反射和转换（可选）
-
-## 🔨 构建方法
-
-### 基础构建
-
-```bash
-# 克隆仓库
-git clone https://github.com/yourusername/DistRender.git
-cd DistRender
-
-# Debug 模式构建
-cargo build
-
-# Release 模式构建（推荐用于性能测试）
-cargo build --release
-```
-
-### 构建特定组件
-
-```bash
-# 仅构建主程序
-cargo build --bin dist_render
-
-# 仅构建外部 GUI
-cargo build --bin dist_render_gui
-
-# 构建并运行示例
-cargo run --example event_system_demo
-cargo run --example load_obj
-```
-
-### 编译优化选项
-
-编辑 `Cargo.toml` 可调整优化级别：
-
-```toml
-[profile.release]
-opt-level = 3           # 最大优化
-lto = true              # 链接时优化
-codegen-units = 1       # 单编译单元（更好的优化）
-strip = true            # 去除调试符号
-```
-
-### 构建故障排查
-
-#### 着色器编译失败
-
-```bash
-# 确保安装了 CMake
-cmake --version
-
-# 清理并重新构建
-cargo clean
-cargo build
-```
-
-#### Vulkan 驱动问题（Linux）
-
-```bash
-# 安装 Vulkan 开发包
-sudo apt-get install vulkan-tools libvulkan-dev
-
-# 验证 Vulkan 可用
-vulkaninfo
-```
-
-#### DirectX 12 问题（Windows）
-
-确保 Windows 10/11 版本足够新：
-
-```powershell
-# 检查 DirectX 版本
-dxdiag
-```
-
-## 🚧 未来计划 (TODO)
-
-### 短期目标（1-3 个月）
-
-- [ ] **PBR 材质系统**
-  - [ ] 实现基于物理的 BRDF
-  - [ ] 支持金属度/粗糙度工作流
-  - [ ] HDR 环境贴图
-
-- [ ] **延迟渲染管线**
-  - [ ] G-Buffer 实现
-  - [ ] 多光源支持（点光源、聚光灯）
-  - [ ] SSAO（屏幕空间环境光遮蔽）
-
-- [ ] **资源管理优化**
-  - [ ] 纹理加载和缓存
-  - [ ] 统一的资源池
-  - [ ] 异步资源加载
-
-- [ ] **相机系统增强**
-  - [ ] 相机动画路径
-  - [ ] 多相机切换
-  - [ ] 相机抖动效果
-
-### 中期目标（3-6 个月）
-
-- [ ] **阴影系统**
-  - [ ] 级联阴影贴图（CSM）
-  - [ ] 软阴影（PCF/PCSS）
-  - [ ] 点光源阴影（Cubemap）
-
-- [ ] **后处理管线**
-  - [ ] Bloom（泛光）
-  - [ ] Tone Mapping（色调映射）
-  - [ ] Color Grading（颜色分级）
-  - [ ] 抗锯齿（TAA/FXAA）
-
-- [ ] **场景管理**
-  - [ ] 场景序列化/反序列化
-  - [ ] 场景节点层级
-  - [ ] 场景导入导出（glTF 2.0）
-
-- [ ] **性能优化**
-  - [ ] 遮挡剔除
-  - [ ] LOD（细节层次）系统
-  - [ ] GPU Instancing
-  - [ ] 多线程渲染命令生成
-
-### 长期目标（6-12 个月）
-
-- [ ] **高级渲染技术**
-  - [ ] 光线追踪（DXR/Vulkan Ray Tracing）
-  - [ ] 全局光照（GI）
-  - [ ] 体积雾/云
-  - [ ] 粒子系统
-
-- [ ] **物理系统集成**
-  - [ ] 刚体物理（rapier/PhysX）
-  - [ ] 碰撞检测
-  - [ ] 物理材质
-
-- [ ] **动画系统**
-  - [ ] 骨骼动画
-  - [ ] 蒙皮网格
-  - [ ] 动画混合树
-
-- [ ] **编辑器开发**
-  - [ ] 可视化场景编辑器
-  - [ ] 材质编辑器
-  - [ ] 实时预览
-
-- [ ] **网络渲染**
-  - [ ] 多机协同渲染
-  - [ ] 渲染农场支持
-  - [ ] 远程调试工具
-
-### 平台扩展
-
-- [ ] **移动平台支持**
-  - [ ] iOS (Metal)
-  - [ ] Android (Vulkan)
-
-- [ ] **Web 平台**
-  - [ ] WebGPU 支持
-  - [ ] WASM 编译
-
-## 🤝 贡献指南
-
-欢迎提交 Issue 和 Pull Request！
-
-在提交代码前，请确保：
-1. 代码符合 Rust 风格指南（`cargo fmt`）
-2. 通过所有测试（`cargo test`）
-3. 通过 Clippy 检查（`cargo clippy`）
-4. 添加必要的注释和文档
-
-## 📚 学习资源
-
-- [Vulkan Tutorial](https://vulkan-tutorial.com/)
-- [Learn wgpu](https://sotrh.github.io/learn-wgpu/)
-- [Real-Time Rendering](https://www.realtimerendering.com/)
-- [GPU Gems](https://developer.nvidia.com/gpugems/gpugems/contributors)
-
-## 📄 许可证
-
-MIT License
-
-Copyright (c) 2024-2026 DistRender Contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+_Original README follows:_
 
 ---
 
-**Made with ❤️ using Rust** └── scene.rs           # 场景控制面板
-│
-├── assets/
-│   └── models/                    # 3D 模型资源
-│
-├── examples/                      # 示例程序
-│   ├── event_system_demo.rs       # 事件系统演示
-│   └── load_obj.rs                # OBJ 模型加载演示
-│
-├── build.rs                       # 构建脚本（Shader 编译）
-├── Cargo.toml                     # 项目配置
-├── config.toml                    # 运行时配置
-└── scene.toml                     # 场景配置
+Its general goal is to get as close as possible to path-traced reference at real-time rates in dynamic scenes, without any precomputed light transport, or manually placed light probes.
+
+Dist Render does not currently aim to be a fully-featured renderer used to ship games, support all sorts of scenes, lighting phenomena, or a wide range of hardware. It's a hobby project, takes a lot of shortcuts, and is perpetually a work in progress.
+
+For more context, check out our [announcement article on Embark's Medium](https://medium.com/embarkstudios/homegrown-rendering-with-rust-1e39068e56a7). You'll also get to learn how this renderer connects to our rendering work, and the [`rust-gpu`](https://github.com/EmbarkStudios/rust-gpu) project!
+
+![image (5)](https://user-images.githubusercontent.com/16522064/146789417-0cc84f60-157d-4a7d-99f5-79122c1fa982.png)
+_Ruins environment rendered in Dist Render. [Scene](https://www.unrealengine.com/marketplace/en-US/product/modular-ruins-c) by Crebotoly_
+
+## Features
+
+* Hybrid rendering using a mixture of raster, compute, and ray-tracing
+* Dynamic global illumination
+  * Fully dynamic geometry and lighting without precomputation
+  * Volumetric temporally-recurrent irradiance cache for "infinite" bounces
+  * Ray-traced diffuse final gather for high-frequency details
+  * Ray-traced specular, falling back to diffuse after the first hit
+* Sun with ray-traced soft shadows
+* Standard PBR with GGX and roughness/metalness
+  * Energy-preserving multi-scattering BRDF
+* Reference path-tracing mode
+* Temporal super-resolution and anti-aliasing
+* Natural tone mapping
+* Physically-based glare
+* Basic motion blur
+* Contrast-adaptive sharpening
+* Optional DLSS support
+* glTF mesh loading (no animations yet)
+* A render graph running it all
+
+## Technical details
+
+* [Global illumination overview](docs/gi-overview.md)
+* Repository highlights:
+  * HLSL shaders: [`assets/shaders/`](assets/shaders)
+  * Rust shaders: [`crates/lib/rust-shaders/`](crates/lib/rust-shaders)
+  * Main render graph passes: [`world_render_passes.rs`](crates/lib/dist-render/src/world_render_passes.rs)
+
+## Primary platforms
+
+Dist Render currently works on a limited range of operating systems and hardware.
+
+Hardware:
+
+* Nvidia RTX series
+* Nvidia GTX 1060 and newer _with 6+ GB of VRAM_ (slow: driver-emulated ray-tracing)
+* AMD Radeon RX 6000 series
+
+Operating systems:
+
+* Windows
+* Linux
+
+## Secondary Platforms
+
+Dist Render has a rudimentary "RTX Off" mode which runs on a wider range of systems, but most of its visual features are disabled.
+
+Hardware:
+
+* Older GPUs with support for Vulkan 1.2
+
+Operating systems:
+
+* macOS
+
+## Dependencies
+
+### (Some) Linux dependencies
+
+* `uuid-dev`
+* In case the bundled `libdxcompiler.so` doesn't work: <https://github.com/microsoft/DirectXShaderCompiler#downloads>
+
+### (Some) MacOS dependencies
+
+* `ossp-uuid` (`brew install ossp-uuid`)
+
+## Building and running
+
+To build Dist Render [you need Rust](https://www.rust-lang.org/tools/install).
+
+Once Rust is installed, open a command prompt in the project folder, then build and run the viewer app via:
+
+```
+cargo run --bin view --release
 ```
 
-## ⚡ 事件系统
+This will compile a binary in the `target/release` folder, and then run it.
 
-DistRender 提供了一个类型安全、高性能的事件处理框架，参考了 DistEngine (C++) 的设计理念。
-
-### 特性
-
-- ✅ **类型安全** - 编译时类型检查，避免运行时错误
-- ✅ **零成本抽象** - 无运行时开销，性能媲美手写代码
-- ✅ **事件处理链** - 支持多个处理器链式处理同一事件
-- ✅ **易于扩展** - 轻松添加新的事件类型
-
-### 支持的事件类型
-
-| 类别 | 事件类型 | 说明 |
-|------|---------|------|
-| **窗口** | `WindowResizeEvent` | 窗口大小调整 |
-| | `WindowCloseEvent` | 窗口关闭 |
-| **鼠标** | `MouseButtonEvent` | 鼠标按钮按下/释放 |
-| | `MouseMoveEvent` | 鼠标移动 |
-| | `MouseScrollEvent` | 鼠标滚轮 |
-| **键盘** | `KeyboardEvent` | 键盘按键按下/释放 |
-| **系统** | `TickEvent` | 每帧时钟事件 |
-| | `DrawEvent` | 绘制事件 |
-
-### 运行演示
-
-```bash
-cargo run --example event_system_demo
-```
-
-## 🏗️ 架构设计
-
-### 分层架构（概念）
+For a list of supported command-line switches see `--help`. In order to pass it through `cargo` to the renderer, you need to separate the `cargo` arguments from `view` arguments using `--` e.g.:
 
 ```
-┌─────────────────────────────────────────────────┐
-│              Application                       │  应用层（main.rs）
-├─────────────────────────────────────────────────┤
-│          Renderer（统一接口）                   │  渲染层
-├──────────┬──────────┬──────────┬───────────────┤
-│  Vulkan  │   DX12   │  Metal   │     wgpu      │  后端层
-│ Renderer │ Renderer │ Renderer │   Renderer    │
-└──────────┴──────────┴──────────┴───────────────┘
+cargo run --bin view --release -- --help
 ```
 
-## � 依赖要求
+## Loading assets
 
-### 通用依赖
+Dist Render supports meshes in the [glTF 2.0](https://github.com/KhronosGroup/glTF) format, and also has its own tiny [RON](https://github.com/ron-rs/ron)-based scene format which can refer to multiple glTF 2.0 meshes.
 
-- **Rust**：推荐使用最新稳定版（1.70+）
-- **CMake**：用于编译 shaderc（Shader 编译库）
+To load either, simply drag-n-drop the `.gltf`, `.glb`, or `.ron` file onto the window of the `view` app. See the `assets/` folder for a few bundled examples.
 
-### macOS - Metal 后端
+The first time a mesh is loaded, it is converted to a runtime format: the vertices are packed, and textures are compressed. The next time the same mesh is used, it's loaded from the `cache/` folder.
 
-Metal 后端是 macOS 原生图形 API，需要以下环境：
+Please note that only the roughness-metalness workflow in glTF is supported. In Blender that corresponds to _Principled BSDF_.
 
-- **macOS 10.13+**（High Sierra 或更高版本）
-- **Xcode Command Line Tools**：
-  ```bash
-  xcode-select --install
-  ```
+Dist Render can also load image-based lights ([examples](http://www.hdrlabs.com/sibl/archive.html)). To do so, drag-n-drop an `.exr` or `.hdr` file onto window of the `view` app.
 
-- **依赖 crate**：
-  - `metal = "0.27.0"` - Metal API 绑定
-  - `objc = "0.2.7"` - Objective-C 运行时
-  - `cocoa = "0.25.0"` - macOS AppKit 集成
+The loaded assets can be manipulated in the `Scene` section of the UI. The app state is persisted in `view_state.ron`.
 
-### 其他平台
+## Controls in the `view` app
 
-- **Windows**：DirectX 12 需要 Windows 10+
-- **Linux**：Vulkan 需要安装对应驱动
+* WSAD, QE - movement
+* Mouse + RMB - rotate the camera
+* Mouse + LMB - rotate the sun
+* Shift - move faster
+* Ctrl - move slower
+* Space - switch to reference path tracing
+* Tab - show/hide the UI
 
-### Shader 编译
+## Resolution scaling
 
-所有后端都需要 **shaderc** 用于在构建时编译 Shader：
+### DPI
 
-```bash
-# macOS
-brew install cmake
+For the `view` app, DPI scaling in the operating system affects the physical number of pixels of the rendering output. The `--width` and `--height` parameters correspond to _logical_ window size **and** the internal rendering resolution. Suppose the OS uses DPI scaling of `1.5`, and the app is launched with `--width 1000`, the actual physical width of the window will be `1500` px. Rendering will still happen at `1000` px, with upscaling to `1500` px at the very end, via a Catmull-Rom kernel.
 
-# Ubuntu/Debian
-sudo apt-get install cmake
+### Temporal upsampling
 
-# Windows
-# 通过 Visual Studio Installer 安装 CMake
-```
+Dist Render can also render at a reduced internal resolution, and reconstruct a larger image via temporal upsampling, trading quality for performance. A custom temporal super-resolution algorithm is used by default, and [DLSS is supported](docs/using-dlss.md) on some platforms. Both approaches result in better quality than what could be achieved by simply spatially scaling up the image at the end.
 
-## ⚠️ 注意事项
+For example, `--width 1920 --height 1080 --temporal-upsampling 1.5` will produce a `1920x1080` image by upsampling by a factor of `1.5` from `1280x720`. Most of the rendering will then happen with `1.5 * 1.5 = 2.25` times fewer pixels, resulting in an _almost_ 2x speedup.
 
-### Metal 后端（macOS）
+## Technical guides
 
-1. **坐标系统**：Metal 使用 Y-up 坐标系（与 OpenGL 一致），深度范围 [0, 1]
-2. **Shader 语言**：使用 Metal Shading Language (MSL)，Shader 文件位于 `src/gfx/metal/shaders/shader.metal`
-3. **性能优化**：
-   - 已启用三重缓冲（`maximum_drawable_count = 3`）以减少帧延迟
-   - Depth correction 矩阵已预计算并缓存
-4. **GUI 支持**：Metal 后端默认启用外部 GUI，可通过 `--no-external-gui` 禁用
+* [Using DLSS](docs/using-dlss.md)
+* [Working on Rust shaders](docs/rust-shaders.md)
+* [Using `dist-render` as a crate](docs/using-dist-render.md)
 
-### 跨后端开发
+## Known issues
 
-由于不同图形 API 的坐标系统差异，在实现新功能时需注意：
+* Vulkan API usage is extremely basic. Resources are usually not released, and barriers aren't optimal.
+* There are hard limit on mesh data and instance counts. Exceeding those limits will result in panics and Vulkan validation errors / driver crashes.
+* Window (framebuffer) resizing is not yet implemented.
+* Denoising needs more work (always).
 
-| 后端 | NDC Y 轴 | 深度范围 | 备注 |
-|------|---------|---------|------|
-| OpenGL/Metal | Y-up | [0, 1] (Metal) / [-1, 1] (GL) | Metal 需深度校正 |
-| Vulkan | Y-down | [0, 1] | 需 Y 轴翻转 |
-| DirectX 12 | Y-up | [0, 1] | 与 Metal 类似 |
-| wgpu | 后端依赖 | 后端依赖 | 自动处理差异 |
+## Acknowledgments
 
-## 🔧 技术栈
+This project is made possible by the awesome open source Rust community, and benefits from a multitude of crates 💖🦀
 
-- **Rust**：系统编程语言
-- **Winit**：跨平台窗口管理
-- **Vulkan**：通过 `vulkano`/`ash`
-- **DirectX 12**：通过 `windows-rs`
-- **Metal**：通过 `metal-rs` (macOS 原生)
-- **wgpu**：跨平台图形抽象
-- **egui**：GUI 框架（wgpu 内置渲染；Vulkan/DX12/Metal 通过外部 GUI + IPC 同步）
+Special shout-outs go to:
 
-## 📄 许可证
+* Felix Westin for his [MinimalAtmosphere](https://github.com/Fewes/MinimalAtmosphere), which this project uses for sky rendering.
+* AMD, especially Dominik Baumeister and Guillaume Boissé for the [FidelityFX Shadow Denoiser](https://gpuopen.com/fidelityfx-denoiser/), which forms the basis of shadow denoising in Dist Render.
+* Maik Klein for the Vulkan wrapper [ash](https://github.com/MaikKlein/ash), making it easy for Dist Render to talk to the GPU.
+* Traverse Research and Jasper Bekkers for a number of highly relevant crates:
+  * Bindings to the DXC shader compiler: [hassle-rs](https://github.com/Traverse-Research/hassle-rs)
+  * SPIR-V reflection utilities: [rspirv-reflect](https://github.com/Traverse-Research/rspirv-reflect)
+  * Vulkan memory management: [gpu-allocator](https://github.com/Traverse-Research/gpu-allocator)
+  * Blue noise sampling: [blue-noise-sampler](https://github.com/Jasper-Bekkers/blue-noise-sampler)
+* Troy Sobotka for guidance and mind-bending discussions about color.
 
-MIT License
+## Contribution
+
+[![Contributor Covenant](https://img.shields.io/badge/contributor%20covenant-v1.4-ff69b4.svg)](../main/CODE_OF_CONDUCT.md)
+
+We welcome community contributions to this project.
+
+Please read our [Contributor Guide](CONTRIBUTING.md) for more information on how to get started.
+Please also read our [Contributor Terms](CONTRIBUTING.md#contributor-terms) before you make any contributions.
+
+Any contribution intentionally submitted for inclusion in an Embark Studios project, shall comply with the Rust standard licensing model (MIT OR Apache 2.0) and therefore be dual licensed as described below, without any additional terms or conditions:
+
+### License
+
+This contribution is dual licensed under EITHER OF
+
+* Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+* MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+
+at your option.
+
+For clarity, "your" refers to Embark or any other licensee/user of the contribution.
