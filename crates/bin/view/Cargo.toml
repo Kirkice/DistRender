@@ -7,12 +7,12 @@ edition = "2021"
 
 [dependencies]
 dist-render = { path = "../../lib/dist-render" }
-dist-render-simple = { path = "../../lib/dist-render-simple", features = ["dear-imgui", "winit_serde"] }
+dist-render-simple = { path = "../../lib/dist-render-simple", features = ["egui", "winit_serde"] }
 dist-render-asset-pipe = { path = "../../lib/dist-render-asset-pipe"}
 
 anyhow = "1.0"
 dolly = "=0.4.0"
-imgui = "0.7"
+egui = { version = "0.15", default-features = false, features = ["default_fonts", "single_threaded"] }
 log = "0.4"
 ron = "0.6.2"
 serde = { version = "1.0", features = ["derive"] }

@@ -1,15 +1,15 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, sync::Arc};
 
 use dist_render::{
-    backend::{vulkan::RenderBackendConfig, *},
+    backend::{ash::vk, vulkan::RenderBackendConfig, *},
     frame_desc::WorldFrameDesc,
     rg,
     ui_renderer::UiRenderer,
     world_renderer::WorldRenderer,
 };
 
-#[cfg(feature = "dear-imgui")]
-use dist_render_imgui::ImGuiBackend;
+#[cfg(feature = "egui")]
+use dist_render_egui::EguiBackend;
 
 use turbosloth::*;
 
@@ -27,8 +27,11 @@ pub struct FrameContext<'a> {
     pub world_renderer: &'a mut WorldRenderer,
     pub window: &'a winit::window::Window,
 
-    #[cfg(feature = "dear-imgui")]
-    pub imgui: Option<ImguiContext<'a>>,
+    #[cfg(feature = "egui")]
+    pub egui: Option<EguiContext<'a>>,
+
+    #[cfg(feature = "egui")]
+    pub viewport_texture_id: Option<egui::TextureId>,
 }
 
 impl<'a> FrameContext<'a> {
@@ -37,36 +40,79 @@ impl<'a> FrameContext<'a> {
     }
 }
 
-#[cfg(feature = "dear-imgui")]
-pub struct ImguiContext<'a> {
-    imgui: &'a mut imgui::Context,
-    imgui_backend: &'a mut ImGuiBackend,
+#[cfg(feature = "egui")]
+pub struct EguiContext<'a> {
+    egui: &'a mut egui::CtxRef,
+    egui_backend: &'a mut EguiBackend,
     ui_renderer: &'a mut UiRenderer,
     window: &'a winit::window::Window,
-    dt_filtered: f32,
 }
 
-#[cfg(feature = "dear-imgui")]
-impl<'a> ImguiContext<'a> {
-    pub fn frame(self, callback: impl FnOnce(&imgui::Ui<'_>)) {
-        let ui = self
-            .imgui_backend
-            .prepare_frame(self.window, self.imgui, self.dt_filtered);
-        callback(&ui);
-        self.imgui_backend
-            .finish_frame(ui, self.window, self.ui_renderer);
+#[cfg(feature = "egui")]
+impl<'a> EguiContext<'a> {
+    pub fn frame(self, callback: impl FnOnce(&egui::CtxRef)) {
+        self.egui_backend.prepare_frame(self.window, self.egui);
+        callback(self.egui);
+        self.egui_backend
+            .finish_frame(self.egui, self.window, self.ui_renderer);
     }
 }
 
 struct MainLoopOptional {
-    #[cfg(feature = "dear-imgui")]
-    imgui_backend: ImGuiBackend,
+    #[cfg(feature = "egui")]
+    egui_backend: EguiBackend,
 
-    #[cfg(feature = "dear-imgui")]
-    imgui: imgui::Context,
+    #[cfg(feature = "egui")]
+    egui: egui::CtxRef,
+
+    #[cfg(feature = "egui")]
+    viewport_texture: EguiViewportTexture,
 
     #[cfg(feature = "puffin-server")]
     _puffin_server: puffin_http::Server,
+}
+
+#[cfg(feature = "egui")]
+struct EguiViewportTexture {
+    texture_id: egui::TextureId,
+    image: Arc<Image>,
+}
+
+#[cfg(feature = "egui")]
+impl EguiViewportTexture {
+    fn new(device: &Device, egui_backend: &mut EguiBackend, extent: [u32; 2]) -> Self {
+        let texture_id = dist_render_egui::EguiBackend::viewport_texture_id();
+        let image = Arc::new(
+            device
+                .create_image(
+                    ImageDesc::new_2d(vk::Format::R8G8B8A8_UNORM, extent)
+                        .usage(vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::STORAGE),
+                    vec![],
+                )
+                .unwrap(),
+        );
+        egui_backend.register_user_texture(texture_id, image.clone());
+
+        Self { texture_id, image }
+    }
+
+    fn ensure_extent(&mut self, device: &Device, egui_backend: &mut EguiBackend, extent: [u32; 2]) {
+        let extent = [extent[0].max(1), extent[1].max(1)];
+        if self.image.desc.extent_2d() == extent {
+            return;
+        }
+
+        self.image = Arc::new(
+            device
+                .create_image(
+                    ImageDesc::new_2d(vk::Format::R8G8B8A8_UNORM, extent)
+                        .usage(vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::STORAGE),
+                    vec![],
+                )
+                .unwrap(),
+        );
+        egui_backend.register_user_texture(self.texture_id, self.image.clone());
+    }
 }
 
 pub enum WindowScale {
@@ -261,15 +307,18 @@ impl SimpleMainLoop {
 
         let rg_renderer = dist_render::rg::renderer::Renderer::new(&render_backend)?;
 
-        #[cfg(feature = "dear-imgui")]
-        let mut imgui = imgui::Context::create();
+        #[cfg(feature = "egui")]
+        let egui = egui::CtxRef::default();
 
-        #[cfg(feature = "dear-imgui")]
-        let mut imgui_backend =
-            dist_render_imgui::ImGuiBackend::new(rg_renderer.device().clone(), &window, &mut imgui);
+        #[cfg(feature = "egui")]
+        let mut egui_backend =
+            dist_render_egui::EguiBackend::new(rg_renderer.device().clone(), &window, &egui);
 
-        #[cfg(feature = "dear-imgui")]
-        imgui_backend.create_graphics_resources(swapchain_extent);
+        #[cfg(feature = "egui")]
+        egui_backend.create_graphics_resources(swapchain_extent);
+
+        #[cfg(feature = "egui")]
+        let viewport_texture = EguiViewportTexture::new(rg_renderer.device().as_ref(), &mut egui_backend, render_extent);
 
         #[cfg(feature = "puffin-server")]
         let puffin_server = {
@@ -281,10 +330,12 @@ impl SimpleMainLoop {
         };
 
         let optional = MainLoopOptional {
-            #[cfg(feature = "dear-imgui")]
-            imgui_backend,
-            #[cfg(feature = "dear-imgui")]
-            imgui,
+            #[cfg(feature = "egui")]
+            egui_backend,
+            #[cfg(feature = "egui")]
+            egui,
+            #[cfg(feature = "egui")]
+            viewport_texture,
             #[cfg(feature = "puffin-server")]
             _puffin_server: puffin_server,
         };
@@ -318,7 +369,7 @@ impl SimpleMainLoop {
             mut event_loop,
             mut render_backend,
             mut rg_renderer,
-            render_extent,
+            mut render_extent,
         } = self;
 
         let mut events = Vec::new();
@@ -348,30 +399,22 @@ impl SimpleMainLoop {
                 puffin::profile_scope!("event handler");
 
                 let _ = &render_backend;
-                #[cfg(feature = "dear-imgui")]
-                optional
-                    .imgui_backend
-                    .handle_event(&window, &mut optional.imgui, &event);
+                #[cfg(feature = "egui")]
+                let ui_consumed_event = optional
+                    .egui_backend
+                    .handle_event(&window, &optional.egui, &event);
 
-                #[cfg(feature = "dear-imgui")]
-                let ui_wants_mouse = optional.imgui.io().want_capture_mouse;
-
-                #[cfg(not(feature = "dear-imgui"))]
-                let ui_wants_mouse = false;
+                #[cfg(not(feature = "egui"))]
+                let ui_consumed_event = false;
 
                 *control_flow = ControlFlow::Poll;
 
-                let mut allow_event = true;
+                let allow_event = !ui_consumed_event;
                 match &event {
                     Event::WindowEvent { event, .. } => match event {
                         WindowEvent::CloseRequested => {
                             *control_flow = ControlFlow::Exit;
                             running = false;
-                        }
-                        WindowEvent::CursorMoved { .. } | WindowEvent::MouseInput { .. }
-                            if ui_wants_mouse =>
-                        {
-                            allow_event = false;
                         }
                         _ => {}
                     },
@@ -426,17 +469,28 @@ impl SimpleMainLoop {
                 world_renderer: &mut world_renderer,
                 window: &window,
 
-                #[cfg(feature = "dear-imgui")]
-                imgui: Some(ImguiContext {
-                    imgui: &mut optional.imgui,
-                    imgui_backend: &mut optional.imgui_backend,
+                #[cfg(feature = "egui")]
+                egui: Some(EguiContext {
+                    egui: &mut optional.egui,
+                    egui_backend: &mut optional.egui_backend,
                     ui_renderer: &mut ui_renderer,
-                    dt_filtered,
                     window: &window,
                 }),
+
+                #[cfg(feature = "egui")]
+                viewport_texture_id: Some(optional.viewport_texture.texture_id),
             });
 
             events.clear();
+
+            render_extent = frame_desc.render_extent;
+
+            #[cfg(feature = "egui")]
+            optional.viewport_texture.ensure_extent(
+                rg_renderer.device().as_ref(),
+                &mut optional.egui_backend,
+                frame_desc.render_extent,
+            );
 
             // Physical window extent in pixels
             let swapchain_extent = [window.inner_size().width, window.inner_size().height];
@@ -446,7 +500,33 @@ impl SimpleMainLoop {
                 rg_renderer.prepare_frame(|rg| {
                     rg.debug_hook = world_renderer.rg_debug_hook.take();
                     let main_img = world_renderer.prepare_render_graph(rg, &frame_desc);
-                    let ui_img = ui_renderer.prepare_render_graph(rg);
+
+                    #[cfg(feature = "egui")]
+                    let viewport_img = {
+                        let mut viewport_img = rg.import(
+                            optional.viewport_texture.image.clone(),
+                            vk_sync::AccessType::Nothing,
+                        );
+                        let main_extent: [f32; 4] = main_img.desc().extent_inv_extent_2d();
+                        let viewport_extent: [f32; 4] = viewport_img.desc().extent_inv_extent_2d();
+
+                        rg::SimpleRenderPass::new_compute(
+                            rg.add_pass("copy viewport to gui texture"),
+                            "/shaders/copy_to_srgb.hlsl",
+                        )
+                        .read(&main_img)
+                        .write(&mut viewport_img)
+                        .constants((main_extent, viewport_extent))
+                        .dispatch(viewport_img.desc().extent);
+
+                        viewport_img
+                    };
+
+                    #[cfg(feature = "egui")]
+                    let ui_img = ui_renderer.prepare_render_graph(rg, std::slice::from_ref(&viewport_img));
+
+                    #[cfg(not(feature = "egui"))]
+                    let ui_img = ui_renderer.prepare_render_graph(rg, &[]);
 
                     let mut swap_chain = rg.get_swap_chain();
                     rg::SimpleRenderPass::new_compute(

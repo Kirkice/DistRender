@@ -4,6 +4,40 @@ use dist_render_simple::{Affine3A, EulerRot, Mat2, Quat, Vec2, Vec3, Vec3Swizzle
 
 use crate::{misc::smoothstep, sequence::Sequence};
 
+fn sanitize_ascii_label(name: &str) -> String {
+    let mut sanitized = String::with_capacity(name.len());
+    let mut previous_was_separator = true;
+
+    for ch in name.chars() {
+        let mapped = if ch.is_ascii_alphanumeric() {
+            Some(ch)
+        } else if ch.is_ascii_whitespace() || matches!(ch, '-' | '_' | '.' | '(' | ')' | '[' | ']') {
+            Some(' ')
+        } else {
+            None
+        };
+
+        match mapped {
+            Some(' ') if !previous_was_separator => {
+                sanitized.push(' ');
+                previous_was_separator = true;
+            }
+            Some(' ') => {}
+            Some(value) => {
+                sanitized.push(value);
+                previous_was_separator = false;
+            }
+            None => {}
+        }
+    }
+
+    sanitized.trim().to_owned()
+}
+
+fn default_game_object_name_for_id(id: GameObjectId) -> String {
+    format!("GameObject {}", id.0)
+}
+
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SunState {
     pub controller: SunController,
@@ -339,7 +373,12 @@ impl MeshSource {
             }
         }
 
-        name
+        let sanitized = sanitize_ascii_label(&name);
+        if sanitized.is_empty() {
+            "Imported Mesh".to_owned()
+        } else {
+            sanitized
+        }
     }
 }
 
@@ -518,10 +557,10 @@ pub enum SceneComponent {
 impl SceneComponent {
     pub fn kind_name(&self) -> &'static str {
         match self {
-            SceneComponent::MeshRenderer(_) => "MeshRenderer",
+            SceneComponent::MeshRenderer(_) => "Mesh Renderer",
             SceneComponent::Camera(_) => "Camera",
             SceneComponent::Sun(_) => "Sun",
-            SceneComponent::LocalLights(_) => "LocalLights",
+            SceneComponent::LocalLights(_) => "Local Lights",
         }
     }
 
@@ -602,14 +641,24 @@ impl GameObject {
         name: impl Into<String>,
         transform: SceneElementTransform,
     ) -> Self {
+        let name = Self::sanitized_name(id, &name.into());
         Self {
             id,
-            name: name.into(),
+            name,
             enabled: true,
             builtin: None,
             parent: None,
             transform,
             components: Vec::new(),
+        }
+    }
+
+    pub fn sanitized_name(id: GameObjectId, name: &str) -> String {
+        let sanitized = sanitize_ascii_label(name);
+        if sanitized.is_empty() {
+            default_game_object_name_for_id(id)
+        } else {
+            sanitized
         }
     }
 
@@ -1042,9 +1091,7 @@ impl SceneState {
             seen_ids.push(game_object.id);
             next_game_object_id = next_game_object_id.max(game_object.id.0.saturating_add(1));
 
-            if game_object.name.trim().is_empty() {
-                game_object.name = format!("GameObject {}", game_object.id.0);
-            }
+            game_object.name = GameObject::sanitized_name(game_object.id, &game_object.name);
         }
 
         for game_object in &mut self.game_objects {
@@ -1102,18 +1149,21 @@ impl SceneState {
         if let Some((game_object_index, _)) = self.primary_camera_component_index() {
             if let Some(game_object) = self.game_objects.get_mut(game_object_index) {
                 game_object.builtin = Some(BuiltinGameObjectKind::MainCamera);
+                game_object.name = BuiltinGameObjectKind::MainCamera.display_name().to_owned();
             }
         }
 
         if let Some((game_object_index, _)) = self.sun_component_index() {
             if let Some(game_object) = self.game_objects.get_mut(game_object_index) {
                 game_object.builtin = Some(BuiltinGameObjectKind::Sun);
+                game_object.name = BuiltinGameObjectKind::Sun.display_name().to_owned();
             }
         }
 
         if let Some((game_object_index, _)) = self.local_lights_component_index() {
             if let Some(game_object) = self.game_objects.get_mut(game_object_index) {
                 game_object.builtin = Some(BuiltinGameObjectKind::LocalLights);
+                game_object.name = BuiltinGameObjectKind::LocalLights.display_name().to_owned();
             }
         }
     }

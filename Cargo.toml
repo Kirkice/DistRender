@@ -8,14 +8,12 @@ members = [
     "crates/lib/dist-render-asset",
     "crates/lib/dist-render-asset-pipe",
     "crates/lib/dist-render-backend",
-    "crates/lib/dist-render-imgui",
+    "crates/lib/dist-render-egui",
     "crates/lib/dist-render-rg",
     "crates/lib/dist-render-simple",
     "crates/lib/dist-render",
     "crates/lib/rust-shaders",
     "crates/lib/rust-shaders-shared",
-
-    "crates/lib/ash-imgui",
 ]
 
 exclude = [

@@ -16,14 +16,29 @@ pub type UiRenderCallback =
     Box<dyn (FnOnce(vk::CommandBuffer) -> Result<(), BackendError>) + 'static>;
 
 impl UiRenderer {
-    pub fn prepare_render_graph(&mut self, rg: &mut rg::TemporalRenderGraph) -> rg::Handle<Image> {
-        self.render_ui(rg)
+    pub fn prepare_render_graph(
+        &mut self,
+        rg: &mut rg::TemporalRenderGraph,
+        sampled_images: &[rg::Handle<Image>],
+    ) -> rg::Handle<Image> {
+        self.render_ui(rg, sampled_images)
     }
 
-    fn render_ui(&mut self, rg: &mut rg::RenderGraph) -> rg::Handle<Image> {
+    fn render_ui(
+        &mut self,
+        rg: &mut rg::RenderGraph,
+        sampled_images: &[rg::Handle<Image>],
+    ) -> rg::Handle<Image> {
         if let Some((ui_renderer, image)) = self.ui_frame.take() {
             let mut ui_tex = rg.import(image, AccessType::Nothing);
             let mut pass = rg.add_pass("ui");
+
+            for sampled_image in sampled_images {
+                pass.read(
+                    sampled_image,
+                    AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
+                );
+            }
 
             pass.raster(&mut ui_tex, AccessType::ColorAttachmentWrite);
             pass.render(move |api| ui_renderer(api.cb.raw));

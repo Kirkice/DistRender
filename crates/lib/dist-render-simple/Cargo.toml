@@ -7,9 +7,10 @@ edition = "2021"
 
 [dependencies]
 dist-render = { path = "../dist-render" }
-dist-render-imgui = { path = "../dist-render-imgui", optional = true }
+dist-render-egui = { path = "../dist-render-egui", optional = true }
 
 anyhow = "1.0"
+egui = { version = "0.15", default-features = false, features = ["default_fonts", "single_threaded"], optional = true }
 glam = { version = "0.22", features = ["serde"] }
 log = "0.4"
 puffin = { version = "0.11.0" }
@@ -17,12 +18,11 @@ turbosloth = { git = "https://github.com/h3r2tic/turbosloth.git", rev = "92030af
 winit = "0.25"
 
 puffin_http = { version = "0.8.0", optional = true }
-imgui = { version = "0.7", optional = true }
 
 [features]
-dear-imgui = [
-    "imgui",
-    "dist-render-imgui",
+egui = [
+    "dep:egui",
+    "dist-render-egui",
 ]
 puffin-server = [
     "puffin_http",

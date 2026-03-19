@@ -27,6 +27,33 @@ use std::{fs::File, path::PathBuf};
 
 pub const MAX_FPS_LIMIT: u32 = 256;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ViewportGizmoAxis {
+    X,
+    Y,
+    Z,
+}
+
+impl ViewportGizmoAxis {
+    pub fn world_vector(self) -> Vec3 {
+        match self {
+            ViewportGizmoAxis::X => Vec3::X,
+            ViewportGizmoAxis::Y => Vec3::Y,
+            ViewportGizmoAxis::Z => Vec3::Z,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct ViewportGizmoDragState {
+    pub game_object_id: GameObjectId,
+    pub axis: ViewportGizmoAxis,
+    pub pointer_origin: Vec2,
+    pub screen_direction: Vec2,
+    pub start_world_position: Vec3,
+    pub pixels_per_unit: f32,
+}
+
 fn unique_game_object_name(scene: &SceneState, base_name: String) -> String {
     if !scene
         .game_objects
@@ -73,6 +100,11 @@ pub struct RuntimeState {
     pub active_camera_key: Option<usize>,
     sequence_playback_state: SequencePlaybackState,
     pub sequence_playback_speed: f32,
+
+    pub viewport_hovered: bool,
+    pub viewport_pointer_captured: bool,
+    pub viewport_click_origin: Option<Vec2>,
+    pub viewport_gizmo_drag: Option<ViewportGizmoDragState>,
 
     runtime_scene: RuntimeScene,
 }
@@ -218,6 +250,11 @@ impl RuntimeState {
             sequence_playback_state: SequencePlaybackState::NotPlaying,
             sequence_playback_speed: 1.0,
 
+            viewport_hovered: false,
+            viewport_pointer_captured: false,
+            viewport_click_origin: None,
+            viewport_gizmo_drag: None,
+
             runtime_scene: RuntimeScene::default(),
         };
 
@@ -310,6 +347,11 @@ impl RuntimeState {
     fn update_camera(&mut self, persisted: &mut PersistedState, ctx: &FrameContext) {
         self.sync_camera_rig_from_scene(&persisted.scene);
 
+        let viewport_input_active = !self.show_gui
+            || self.viewport_hovered
+            || self.viewport_pointer_captured
+            || (self.mouse.buttons_held & (1 << 2)) != 0;
+
         let smooth = self.camera.driver_mut::<Smooth>();
         if ctx.world_renderer.render_mode == RenderMode::Reference {
             smooth.position_smoothness = 0.0;
@@ -320,7 +362,7 @@ impl RuntimeState {
         }
 
         // When starting camera rotation, hide the mouse cursor, and capture it to the window.
-        if (self.mouse.buttons_pressed & (1 << 2)) != 0 {
+        if (self.mouse.buttons_pressed & (1 << 2)) != 0 && viewport_input_active {
             let _ = ctx.window.set_cursor_grab(true);
             self.grab_cursor_pos = self.mouse.physical_position;
             ctx.window.set_cursor_visible(false);
@@ -332,13 +374,17 @@ impl RuntimeState {
             ctx.window.set_cursor_visible(true);
         }
 
-        let input = self.movement_map.map(&self.keyboard, ctx.dt_filtered);
-        let move_vec = self.camera.final_transform.rotation
-            * Vec3::new(input["move_right"], input["move_up"], -input["move_fwd"])
-                .clamp_length_max(1.0)
-            * 4.0f32.powf(input["boost"]);
+        let move_vec = if viewport_input_active {
+            let input = self.movement_map.map(&self.keyboard, ctx.dt_filtered);
+            self.camera.final_transform.rotation
+                * Vec3::new(input["move_right"], input["move_up"], -input["move_fwd"])
+                    .clamp_length_max(1.0)
+                * 4.0f32.powf(input["boost"])
+        } else {
+            Vec3::ZERO
+        };
 
-        if (self.mouse.buttons_held & (1 << 2)) != 0 {
+        if (self.mouse.buttons_held & (1 << 2)) != 0 && viewport_input_active {
             // While we're rotating, the cursor should not move, so that upon revealing it,
             // it will be where we started the rotation motion at.
             let _ = ctx
@@ -402,7 +448,11 @@ impl RuntimeState {
     }
 
     fn update_sun(&mut self, persisted: &mut PersistedState, ctx: &mut FrameContext) {
-        if self.mouse.buttons_held & 1 != 0 {
+        let viewport_input_active = !self.show_gui
+            || self.viewport_hovered
+            || self.viewport_pointer_captured;
+
+        if self.mouse.buttons_held & 1 != 0 && viewport_input_active && !self.show_gui {
             let delta_x =
                 (self.mouse.delta.x / ctx.render_extent[0] as f32) * std::f32::consts::TAU;
             let delta_y = (self.mouse.delta.y / ctx.render_extent[1] as f32) * std::f32::consts::PI;
