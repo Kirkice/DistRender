@@ -1,0 +1,9 @@
+(
+    instances: [
+        (
+            position: (0, -11.25, 0),
+            mesh: "/meshes/viziers_observation_deck/scene.gltf",
+            scale: (0.0075, 0.0075, 0.0075),
+        ),
+    ]
+)

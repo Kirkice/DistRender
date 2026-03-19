@@ -1,0 +1,9 @@
+(
+    instances: [
+        (
+            position: (-4.5, -1, -1),
+            mesh: "/meshes/gas_stations_fixed/scene.gltf",
+            scale: (0.005, 0.005, 0.005),
+        ),
+    ]
+)
