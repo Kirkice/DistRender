@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "view", about = "Dist Render scene viewer.")]
+#[structopt(name = "renderer", about = "Dist Render scene renderer/editor.")]
 pub struct Opt {
     #[structopt(long, default_value = "1920")]
     pub width: u32,

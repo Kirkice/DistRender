@@ -11,7 +11,8 @@ use crate::{
     runtime::{component::{MeshSource, SceneElementTransform, SceneState}, RuntimeState},
 };
 
-const APP_STATE_CONFIG_FILE_PATH: &str = "view_state.ron";
+const APP_STATE_CONFIG_FILE_PATH: &str = "renderer_state.ron";
+const LEGACY_APP_STATE_CONFIG_FILE_PATH: &str = "view_state.ron";
 
 struct AppState {
     persisted: PersistedState,
@@ -83,6 +84,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
     set_vfs_mount_point("/meshes", "assets/meshes");
 
     let mut persisted: PersistedState = File::open(APP_STATE_CONFIG_FILE_PATH)
+        .or_else(|_| File::open(LEGACY_APP_STATE_CONFIG_FILE_PATH))
         .map_err(|err| anyhow::anyhow!(err))
         .and_then(|file| Ok(ron::de::from_reader(file)?))
         .unwrap_or_default();

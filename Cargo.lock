@@ -1677,15 +1677,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hello"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "dist-render",
- "dist-render-simple",
-]
-
-[[package]]
 name = "hermit-abi"
 version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2918,6 +2909,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
 
 [[package]]
+name = "renderer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dist-render",
+ "dist-render-asset-pipe",
+ "dist-render-simple",
+ "dolly",
+ "egui",
+ "log",
+ "ron",
+ "serde",
+ "splines",
+ "structopt",
+ "toml 0.7.8",
+]
+
+[[package]]
 name = "ron"
 version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3534,24 +3543,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "view"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "dist-render",
- "dist-render-asset-pipe",
- "dist-render-simple",
- "dolly",
- "egui",
- "log",
- "ron",
- "serde",
- "splines",
- "structopt",
- "toml 0.7.8",
-]
 
 [[package]]
 name = "vk-sync"

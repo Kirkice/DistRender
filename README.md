@@ -113,35 +113,35 @@ Operating systems:
 
 To build Dist Render [you need Rust](https://www.rust-lang.org/tools/install).
 
-Once Rust is installed, open a command prompt in the project folder, then build and run the viewer app via:
+Once Rust is installed, open a command prompt in the project folder, then build and run the renderer app via:
 
 ```
-cargo run --bin view --release
+cargo run --bin renderer --release
 ```
 
 This will compile a binary in the `target/release` folder, and then run it.
 
-For a list of supported command-line switches see `--help`. In order to pass it through `cargo` to the renderer, you need to separate the `cargo` arguments from `view` arguments using `--` e.g.:
+For a list of supported command-line switches see `--help`. In order to pass it through `cargo` to the renderer, you need to separate the `cargo` arguments from `renderer` arguments using `--` e.g.:
 
 ```
-cargo run --bin view --release -- --help
+cargo run --bin renderer --release -- --help
 ```
 
 ## Loading assets
 
 Dist Render supports meshes in the [glTF 2.0](https://github.com/KhronosGroup/glTF) format, and also has its own tiny [RON](https://github.com/ron-rs/ron)-based scene format which can refer to multiple glTF 2.0 meshes.
 
-To load either, simply drag-n-drop the `.gltf`, `.glb`, or `.ron` file onto the window of the `view` app. See the `assets/` folder for a few bundled examples.
+To load either, simply drag-n-drop the `.gltf`, `.glb`, or `.ron` file onto the window of the `renderer` app. See the `assets/` folder for a few bundled examples.
 
 The first time a mesh is loaded, it is converted to a runtime format: the vertices are packed, and textures are compressed. The next time the same mesh is used, it's loaded from the `cache/` folder.
 
 Please note that only the roughness-metalness workflow in glTF is supported. In Blender that corresponds to _Principled BSDF_.
 
-Dist Render can also load image-based lights ([examples](http://www.hdrlabs.com/sibl/archive.html)). To do so, drag-n-drop an `.exr` or `.hdr` file onto window of the `view` app.
+Dist Render can also load image-based lights ([examples](http://www.hdrlabs.com/sibl/archive.html)). To do so, drag-n-drop an `.exr` or `.hdr` file onto window of the `renderer` app.
 
-The loaded assets can be manipulated in the `Scene` section of the UI. The app state is persisted in `view_state.ron`.
+The loaded assets can be manipulated in the `Scene` section of the UI. The app state is persisted in `renderer_state.ron`.
 
-## Controls in the `view` app
+## Controls in the `renderer` app
 
 * WSAD, QE - movement
 * Mouse + RMB - rotate the camera
@@ -155,7 +155,7 @@ The loaded assets can be manipulated in the `Scene` section of the UI. The app s
 
 ### DPI
 
-For the `view` app, DPI scaling in the operating system affects the physical number of pixels of the rendering output. The `--width` and `--height` parameters correspond to _logical_ window size **and** the internal rendering resolution. Suppose the OS uses DPI scaling of `1.5`, and the app is launched with `--width 1000`, the actual physical width of the window will be `1500` px. Rendering will still happen at `1000` px, with upscaling to `1500` px at the very end, via a Catmull-Rom kernel.
+For the `renderer` app, DPI scaling in the operating system affects the physical number of pixels of the rendering output. The `--width` and `--height` parameters correspond to _logical_ window size **and** the internal rendering resolution. Suppose the OS uses DPI scaling of `1.5`, and the app is launched with `--width 1000`, the actual physical width of the window will be `1500` px. Rendering will still happen at `1000` px, with upscaling to `1500` px at the very end, via a Catmull-Rom kernel.
 
 ### Temporal upsampling
 
