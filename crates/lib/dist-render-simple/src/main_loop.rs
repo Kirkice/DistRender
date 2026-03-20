@@ -409,7 +409,18 @@ impl SimpleMainLoop {
 
                 *control_flow = ControlFlow::Poll;
 
-                let allow_event = !ui_consumed_event;
+                let allow_event = !ui_consumed_event
+                    || matches!(
+                        &event,
+                        Event::WindowEvent {
+                            event:
+                                WindowEvent::MouseInput { .. }
+                                | WindowEvent::MouseWheel { .. }
+                                | WindowEvent::CursorMoved { .. }
+                                | WindowEvent::CursorLeft { .. },
+                            ..
+                        }
+                    );
                 match &event {
                     Event::WindowEvent { event, .. } => match event {
                         WindowEvent::CloseRequested => {

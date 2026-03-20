@@ -4,26 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use anyhow::Context;
-use dist_render::world_renderer::{AddMeshOptions, InstanceHandle, MeshHandle, WorldRenderer};
-use dist_render_simple::canonical_path_from_vfs;
-
-use crate::persisted::{GameObjectId, MeshSource, SceneState};
-
-#[derive(Clone, Copy)]
-pub struct SyncSceneOptions {
-    pub global_emissive_multiplier: f32,
-    pub emissive_enabled: bool,
-}
-
-impl Default for SyncSceneOptions {
-    fn default() -> Self {
-        Self {
-            global_emissive_multiplier: 1.0,
-            emissive_enabled: true,
-        }
-    }
-}
+use super::super::{materials::SyncSceneOptions, *};
 
 #[derive(Default)]
 pub struct RuntimeScene {

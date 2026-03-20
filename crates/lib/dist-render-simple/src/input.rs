@@ -58,6 +58,7 @@ impl KeyboardState {
 pub struct MouseState {
     pub physical_position: PhysicalPosition<f64>,
     pub delta: Vec2,
+    pub wheel_delta: f32,
     pub buttons_held: u32,
     pub buttons_pressed: u32,
     pub buttons_released: u32,
@@ -68,6 +69,7 @@ impl Default for MouseState {
         Self {
             physical_position: PhysicalPosition { x: 0.0, y: 0.0 },
             delta: Vec2::ZERO,
+            wheel_delta: 0.0,
             buttons_held: 0,
             buttons_pressed: 0,
             buttons_released: 0,
@@ -80,6 +82,7 @@ impl MouseState {
         self.buttons_pressed = 0;
         self.buttons_released = 0;
         self.delta = Vec2::ZERO;
+        self.wheel_delta = 0.0;
 
         for event in events {
             match event {
@@ -87,6 +90,14 @@ impl MouseState {
                     WindowEvent::CursorMoved { position, .. } => {
                         self.physical_position = *position;
                     }
+                    WindowEvent::MouseWheel { delta, .. } => match delta {
+                        winit::event::MouseScrollDelta::LineDelta(_, y) => {
+                            self.wheel_delta += *y;
+                        }
+                        winit::event::MouseScrollDelta::PixelDelta(position) => {
+                            self.wheel_delta += position.y as f32 / 80.0;
+                        }
+                    },
                     WindowEvent::MouseInput { state, button, .. } => {
                         let button_id = match button {
                             winit::event::MouseButton::Left => 0,
