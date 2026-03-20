@@ -22,12 +22,13 @@ use self::{
     geometry::RuntimeScene,
 };
 
+pub(crate) use self::core::{CameraPlaybackSequence, MemOption, Sequence, SequenceValue};
+pub(crate) use self::geometry::SceneDesc;
+
 use crate::{
     keymap::KeymapConfig,
     opt::Opt,
     persisted::ShouldResetPathTracer as _,
-    scene::SceneDesc,
-    sequence::{CameraPlaybackSequence, MemOption, SequenceValue},
     PersistedState,
 };
 

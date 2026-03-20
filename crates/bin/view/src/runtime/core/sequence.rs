@@ -79,9 +79,7 @@ impl Sequence {
             .get(idx.saturating_sub(1))
             .map_or(-t_delta, |k| k.t);
 
-        // Insert with the same `t` as the previous one, then shift after.
         self.items.insert(idx, SequenceItem::new(prev_t, value));
-
         self.apply_t_delta_from_index(idx, t_delta);
     }
 
@@ -131,7 +129,6 @@ impl Sequence {
             .map_or(0.0, |next| self.items[i].t - next.t);
 
         self.items.remove(i);
-
         self.apply_t_delta_from_index(i, t_delta);
     }
 

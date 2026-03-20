@@ -6,7 +6,7 @@ use crate::{
 		SceneRenderSettings, SceneState, SunComponent, SunController,
 		DEFAULT_CAMERA_VERTICAL_FOV,
 	},
-	sequence::Sequence,
+	runtime::Sequence,
 };
 
 pub trait ShouldResetPathTracer {

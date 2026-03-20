@@ -335,8 +335,8 @@ impl Renderer {
         _physical_device_properties: &vk::PhysicalDeviceProperties,
         memory_properties: &vk::PhysicalDeviceMemoryProperties,
     ) -> Self {
-        let vertex_shader = load_shader_module(device, include_bytes!("../../ash-imgui/src/imgui.vert.spv"));
-        let fragment_shader = load_shader_module(device, include_bytes!("../../ash-imgui/src/imgui.frag.spv"));
+        let vertex_shader = load_shader_module(device, include_bytes!("shaders/egui.vert.spv"));
+        let fragment_shader = load_shader_module(device, include_bytes!("shaders/egui.frag.spv"));
 
         let sampler = {
             let sampler_create_info = vk::SamplerCreateInfo {

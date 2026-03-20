@@ -5,8 +5,6 @@ mod misc;
 mod opt;
 mod persisted;
 mod runtime;
-mod scene;
-mod sequence;
 
 pub(crate) use persisted::PersistedState;
 
