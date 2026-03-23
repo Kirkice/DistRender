@@ -494,7 +494,21 @@ impl SimpleMainLoop {
 
             events.clear();
 
-            render_extent = frame_desc.render_extent;
+            let new_render_extent = frame_desc.render_extent;
+            if new_render_extent != render_extent {
+                // Render extent changed (e.g. viewport panel resized). The temporal buffers
+                // (TAA history, shadow denoiser history, etc.) were sized for the old extent
+                // and would produce artifacts if reused. Clear them so they are recreated
+                // fresh at the new size on the next prepare_frame.
+                //
+                // device_wait_idle ensures the GPU has finished accessing the old resources
+                // before we drop them.
+                unsafe {
+                    rg_renderer.device().raw.device_wait_idle().unwrap();
+                }
+                rg_renderer.clear_temporal_history();
+            }
+            render_extent = new_render_extent;
 
             #[cfg(feature = "egui")]
             optional.viewport_texture.ensure_extent(

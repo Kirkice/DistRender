@@ -501,4 +501,10 @@ impl Renderer {
     pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
+
+    pub fn clear_temporal_history(&mut self) {
+        if let TemporalRg::Inert(state) = &mut self.temporal_rg_state {
+            state.resources.clear();
+        }
+    }
 }
