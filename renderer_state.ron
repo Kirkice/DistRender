@@ -1,0 +1,113 @@
+(
+    exposure: (
+        ev_shift: 0,
+        use_dynamic_adaptation: false,
+        dynamic_adaptation_speed: 0,
+        dynamic_adaptation_low_clip: 0,
+        dynamic_adaptation_high_clip: 0,
+        contrast: 1,
+    ),
+    movement: (
+        camera_speed: 26.748316,
+        camera_smoothness: 1,
+        sun_rotation_smoothness: 0,
+    ),
+    sequence: (
+        items: [],
+    ),
+    scene: (
+        next_game_object_id: 5,
+        game_objects: [
+            (
+                id: 1,
+                name: "Main Camera",
+                enabled: true,
+                builtin: Some(main_camera),
+                parent: None,
+                transform: (
+                    position: (-0.28624782, 0.7635092, 2.8243802),
+                    rotation_euler_degrees: (-3.8006105, -13.599989, 0.000000026739235),
+                    scale: (1, 1, 1),
+                ),
+                components: [
+                    (
+                        type: "camera",
+                        enabled: true,
+                        primary: true,
+                        vertical_fov: 62,
+                    ),
+                ],
+            ),
+            (
+                id: 2,
+                name: "Sun",
+                enabled: true,
+                builtin: Some(sun),
+                parent: None,
+                transform: (
+                    position: (0, 0, 0),
+                    rotation_euler_degrees: (0, 0, 0),
+                    scale: (1, 1, 1),
+                ),
+                components: [
+                    (
+                        type: "sun",
+                        enabled: true,
+                        controller: (
+                            towards_sun: (0, 1, 0),
+                        ),
+                        size_multiplier: 1,
+                    ),
+                ],
+            ),
+            (
+                id: 3,
+                name: "Local Lights",
+                enabled: true,
+                builtin: Some(local_lights),
+                parent: None,
+                transform: (
+                    position: (0, 0, 0),
+                    rotation_euler_degrees: (0, 0, 0),
+                    scale: (1, 1, 1),
+                ),
+                components: [
+                    (
+                        type: "local_lights",
+                        enabled: true,
+                        theta: 1,
+                        phi: 1,
+                        count: 0,
+                        distance: 1.5,
+                        multiplier: 10,
+                    ),
+                ],
+            ),
+            (
+                id: 4,
+                name: "pica pica mini diorama 01",
+                enabled: true,
+                builtin: None,
+                parent: None,
+                transform: (
+                    position: (0, 0, 0),
+                    rotation_euler_degrees: (0, 0, 0),
+                    scale: (0.1, 0.1, 0.1),
+                ),
+                components: [
+                    (
+                        type: "mesh_renderer",
+                        source: File("\\\\?\\H:\\Project\\DistRender\\assets\\meshes\\pica_pica_-_mini_diorama_01\\scene.gltf"),
+                        enabled: true,
+                        emissive_multiplier: 1,
+                    ),
+                ],
+            ),
+        ],
+        render_settings: (
+            emissive_multiplier: 1,
+            enable_emissive: true,
+        ),
+        ibl: None,
+    ),
+)
