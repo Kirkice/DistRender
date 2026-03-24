@@ -39,6 +39,7 @@ struct PsOut {
 PsOut main(PsIn ps) {
     Mesh mesh = meshes[push_constants.mesh_index];
     MeshMaterial material = vertices.Load<MeshMaterial>(mesh.mat_data_offset + ps.material_id * sizeof(MeshMaterial));
+    InstanceDynamicConstants instance_params = instance_dynamic_parameters_dyn[push_constants.draw_index];
 
     const float lod_bias = -0.5;
 
@@ -49,14 +50,14 @@ PsOut main(PsIn ps) {
         discard;
     }
 
-    float3 albedo = albedo_texel.xyz * float4(material.base_color_mult).xyz * ps.color.xyz;
+    float3 albedo = albedo_texel.xyz * float4(material.base_color_mult).xyz * ps.color.xyz * instance_params.base_color_tint.xyz;
 
     float2 spec_uv = transform_material_uv(material, ps.uv, 2);
     Texture2D spec_tex = bindless_textures[NonUniformResourceIndex(material.spec_map)];
     const float4 metalness_roughness = spec_tex.SampleBias(sampler_llr, spec_uv, lod_bias);
-    float perceptual_roughness = material.roughness_mult * metalness_roughness.x;
+    float perceptual_roughness = material.roughness_mult * metalness_roughness.x * instance_params.roughness_multiplier;
     float roughness = clamp(perceptual_roughness_to_roughness(perceptual_roughness), 1e-4, 1.0);
-    float metalness = metalness_roughness.y * material.metalness_factor;
+    float metalness = saturate(metalness_roughness.y * material.metalness_factor * instance_params.metalness_multiplier);
 
     if (frame_constants.render_overrides.has_flag(RenderOverrideFlags::NO_METAL)) {
         metalness = 0;
@@ -118,7 +119,7 @@ PsOut main(PsIn ps) {
     float3 emissive = 1.0.xxx
         * emissive_tex.SampleBias(sampler_llr, emissive_uv, lod_bias).rgb
         * float3(material.emissive)
-        * instance_dynamic_parameters_dyn[push_constants.draw_index].emissive_multiplier
+        * instance_params.emissive_multiplier
         * frame_constants.pre_exposure;
 
     //albedo = float3(0.966653, 0.802156, 0.323968); // Au from Mitsuba

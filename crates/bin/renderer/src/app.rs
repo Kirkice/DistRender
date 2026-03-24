@@ -33,7 +33,7 @@ impl AppState {
             .build(
                 WindowBuilder::new()
                     .with_title("dist render")
-                    .with_resizable(false)
+                    .with_resizable(true)
                     .with_decorations(!opt.no_window_decorations),
             )?;
 

@@ -61,14 +61,65 @@ impl RuntimeState {
                             .text_color(Self::muted_color()),
                     );
                 });
-                Self::drag_f32(
-                    ui,
-                    "Emissive",
-                    &mut mesh_renderer.emissive_multiplier,
-                    0.05,
-                    0.0,
-                    10.0,
-                );
+
+                ui.add_space(4.0);
+                egui::CollapsingHeader::new("Material Overrides")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        ui.add_space(2.0);
+                        ui.horizontal(|ui| {
+                            Self::badge(ui, "instance");
+                            ui.add(
+                                egui::Label::new("Applies to all materials on this mesh instance.")
+                                    .small()
+                                    .text_color(Self::text_dim()),
+                            );
+
+                            if Self::subtle_button(ui, "Reset").clicked() {
+                                mesh_renderer.reset_material_overrides();
+                            }
+                        });
+
+                        ui.add_space(2.0);
+                        ui.horizontal(|ui| {
+                            Self::prop_label(ui, "Base Color");
+                            let mut base_color = [
+                                mesh_renderer.base_color_tint[0],
+                                mesh_renderer.base_color_tint[1],
+                                mesh_renderer.base_color_tint[2],
+                            ];
+                            if ui.color_edit_button_rgb(&mut base_color).changed() {
+                                mesh_renderer.base_color_tint[0] = base_color[0];
+                                mesh_renderer.base_color_tint[1] = base_color[1];
+                                mesh_renderer.base_color_tint[2] = base_color[2];
+                            }
+                        });
+
+                        Self::drag_f32(
+                            ui,
+                            "Roughness",
+                            &mut mesh_renderer.roughness_multiplier,
+                            0.01,
+                            0.0,
+                            4.0,
+                        );
+                        Self::drag_f32(
+                            ui,
+                            "Metallic",
+                            &mut mesh_renderer.metalness_multiplier,
+                            0.01,
+                            0.0,
+                            4.0,
+                        );
+                        Self::drag_f32(
+                            ui,
+                            "Emissive",
+                            &mut mesh_renderer.emissive_multiplier,
+                            0.05,
+                            0.0,
+                            10.0,
+                        );
+                    });
             }
             SceneComponent::Camera(camera) => {
                 ui.checkbox(&mut camera.enabled, "Enabled");

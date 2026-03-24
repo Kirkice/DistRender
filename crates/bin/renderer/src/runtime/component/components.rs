@@ -14,6 +14,14 @@ fn default_component_emissive_multiplier() -> f32 {
     1.0
 }
 
+fn default_component_base_color_tint() -> [f32; 4] {
+    [1.0, 1.0, 1.0, 1.0]
+}
+
+fn default_component_material_multiplier() -> f32 {
+    1.0
+}
+
 fn default_camera_primary() -> bool {
     true
 }
@@ -173,6 +181,15 @@ pub struct MeshRendererComponent {
     #[serde(default = "default_component_enabled")]
     pub enabled: bool,
 
+    #[serde(default = "default_component_base_color_tint")]
+    pub base_color_tint: [f32; 4],
+
+    #[serde(default = "default_component_material_multiplier")]
+    pub roughness_multiplier: f32,
+
+    #[serde(default = "default_component_material_multiplier")]
+    pub metalness_multiplier: f32,
+
     #[serde(default = "default_component_emissive_multiplier")]
     pub emissive_multiplier: f32,
 }
@@ -182,8 +199,18 @@ impl MeshRendererComponent {
         Self {
             source,
             enabled: true,
+            base_color_tint: default_component_base_color_tint(),
+            roughness_multiplier: default_component_material_multiplier(),
+            metalness_multiplier: default_component_material_multiplier(),
             emissive_multiplier: 1.0,
         }
+    }
+
+    pub fn reset_material_overrides(&mut self) {
+        self.base_color_tint = default_component_base_color_tint();
+        self.roughness_multiplier = default_component_material_multiplier();
+        self.metalness_multiplier = default_component_material_multiplier();
+        self.emissive_multiplier = default_component_emissive_multiplier();
     }
 }
 

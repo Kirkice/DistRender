@@ -289,6 +289,50 @@ impl Swapchain {
     }
 }
 
+impl Swapchain {
+    pub fn recreate(&mut self, new_extent: [u32; 2]) -> Result<()> {
+        // Don't recreate with zero-sized extent (window minimized)
+        if new_extent[0] == 0 || new_extent[1] == 0 {
+            return Ok(());
+        }
+
+        let new_desc = SwapchainDesc {
+            dims: vk::Extent2D {
+                width: new_extent[0],
+                height: new_extent[1],
+            },
+            ..self.desc
+        };
+
+        let mut new_swapchain = std::mem::ManuallyDrop::new(
+            Self::new(&self.device, &self.surface, new_desc)?
+        );
+
+        // Destroy old resources
+        unsafe {
+            for &sem in &self.acquire_semaphores {
+                self.device.raw.destroy_semaphore(sem, None);
+            }
+            for &sem in &self.rendering_finished_semaphores {
+                self.device.raw.destroy_semaphore(sem, None);
+            }
+            self.fns.destroy_swapchain(self.raw, None);
+        }
+
+        // Move new resources into self
+        self.raw = new_swapchain.raw;
+        self.desc = new_swapchain.desc;
+        std::mem::swap(&mut self.images, &mut new_swapchain.images);
+        std::mem::swap(&mut self.acquire_semaphores, &mut new_swapchain.acquire_semaphores);
+        std::mem::swap(&mut self.rendering_finished_semaphores, &mut new_swapchain.rendering_finished_semaphores);
+        self.next_semaphore = 0;
+
+        // new_swapchain is ManuallyDrop so its Drop won't run (which would destroy the new swapchain handle)
+
+        Ok(())
+    }
+}
+
 impl Drop for Swapchain {
     fn drop(&mut self) {
         unsafe {

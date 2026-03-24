@@ -77,15 +77,24 @@ const MAX_GPU_MESHES: usize = 1024;
 const VERTEX_BUFFER_CAPACITY: usize = 1024 * 1024 * 1024;
 const TLAS_PREALLOCATE_BYTES: usize = 1024 * 1024 * 32;
 
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct InstanceDynamicParameters {
+    pub base_color_tint: [f32; 4],
+    pub roughness_multiplier: f32,
+    pub metalness_multiplier: f32,
     pub emissive_multiplier: f32,
+    pub _padding: f32,
 }
 
 impl Default for InstanceDynamicParameters {
     fn default() -> Self {
         Self {
+            base_color_tint: [1.0, 1.0, 1.0, 1.0],
+            roughness_multiplier: 1.0,
+            metalness_multiplier: 1.0,
             emissive_multiplier: 1.0,
+            _padding: 0.0,
         }
     }
 }

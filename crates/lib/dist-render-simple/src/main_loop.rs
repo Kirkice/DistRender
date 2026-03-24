@@ -373,6 +373,7 @@ impl SimpleMainLoop {
         } = self;
 
         let mut events = Vec::new();
+        let mut swapchain_resize_pending: Option<[u32; 2]> = None;
 
         let mut last_frame_instant = std::time::Instant::now();
         let mut last_error_text = None;
@@ -426,6 +427,12 @@ impl SimpleMainLoop {
                         WindowEvent::CloseRequested => {
                             *control_flow = ControlFlow::Exit;
                             running = false;
+                        }
+                        WindowEvent::Resized(physical_size) => {
+                            if physical_size.width > 0 && physical_size.height > 0 {
+                                swapchain_resize_pending =
+                                    Some([physical_size.width, physical_size.height]);
+                            }
                         }
                         _ => {}
                     },
@@ -517,8 +524,27 @@ impl SimpleMainLoop {
                 frame_desc.render_extent,
             );
 
+            // Handle pending swapchain resize
+            if let Some(new_extent) = swapchain_resize_pending.take() {
+                unsafe {
+                    render_backend.device.raw.device_wait_idle().unwrap();
+                }
+                if let Err(e) = render_backend.swapchain.recreate(new_extent) {
+                    log::error!("Failed to recreate swapchain: {:?}", e);
+                }
+
+                #[cfg(feature = "egui")]
+                optional.egui_backend.create_graphics_resources(new_extent);
+            }
+
             // Physical window extent in pixels
             let swapchain_extent = [window.inner_size().width, window.inner_size().height];
+
+            // Skip rendering if window is minimized
+            if swapchain_extent[0] == 0 || swapchain_extent[1] == 0 {
+                std::thread::sleep(std::time::Duration::from_millis(16));
+                continue;
+            }
 
             let prepared_frame = {
                 puffin::profile_scope!("prepare_frame");

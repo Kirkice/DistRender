@@ -84,7 +84,11 @@ struct FrameConstants {
 [[vk::binding(0, 2)]] ConstantBuffer<FrameConstants> frame_constants;
 
 struct InstanceDynamicConstants {
+    float4 base_color_tint;
+    float roughness_multiplier;
+    float metalness_multiplier;
     float emissive_multiplier;
+    float pad0;
 };
 
 [[vk::binding(1, 2)]] StructuredBuffer<InstanceDynamicConstants> instance_dynamic_parameters_dyn;

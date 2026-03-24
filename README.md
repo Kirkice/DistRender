@@ -1,215 +1,180 @@
-<!-- Allow this file to not have a first line heading -->
-<!-- markdownlint-disable-file MD041 -->
-
-<!-- inline html -->
-<!-- markdownlint-disable-file MD033 -->
-
-<div align="center">
-
 # Dist Render
 
-**Experimental real-time global illumination renderer made with Rust and Vulkan**
-
-[![Embark](https://img.shields.io/badge/embark-open%20source-blueviolet.svg)](https://embark.dev)
-[![Embark](https://img.shields.io/badge/discord-ark-%237289da.svg?logo=discord)](https://discord.gg/dAuKfZS)
-</div>
-
-_This project is no longer maintained._
-
-It was a spare-time experiment by one guy who worked at Embark at the time (on non-rendering stuff). If you're looking to learn some artisanal hacks, this might be useful - just don't look too deep into the code 🐙
-
-Janky as it may have been, boy, did we render! 🪩🥳  _(Click for YouTube vids)_
-
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=_1g-XhlI_5A">
-    <img src="https://img.youtube.com/vi/_1g-XhlI_5A/0.jpg" width="45%" alt="New global illumination in Dist Render 0.2">
-  </a>
-  <a href="https://www.youtube.com/watch?v=e7zTtLm2c8A">
-    <img src="https://img.youtube.com/vi/e7zTtLm2c8A/0.jpg" width="45%" alt="New irradiance cache (Dist Render renderer)">
-  </a>
-</p>
-
-_Original README follows:_
+基于 [Embark Studios / kajiya](https://github.com/EmbarkStudios/kajiya) 的实时全局光照渲染器，使用 **Rust + Vulkan** 构建，支持硬件光线追踪。
 
 ---
 
-Its general goal is to get as close as possible to path-traced reference at real-time rates in dynamic scenes, without any precomputed light transport, or manually placed light probes.
+## 功能特性
 
-Dist Render does not currently aim to be a fully-featured renderer used to ship games, support all sorts of scenes, lighting phenomena, or a wide range of hardware. It's a hobby project, takes a lot of shortcuts, and is perpetually a work in progress.
+- **实时全局光照 (GI)** — 多 bounce 漫反射 (RTDGI) 和镜面反射 (RTR)
+- **硬件光线追踪** — Vulkan Ray Tracing 管线驱动的阴影、反射及间接光照
+- **物理天空模型** — 大气散射 + HDR 环境贴图 (IBL)
+- **后处理管线** — TAA、运动模糊、自动曝光、景深、SSGI 等
+- **现代编辑器 UI** — egui 驱动的 Hierarchy / Inspector / Viewport 三栏布局，Unity/Unreal 风格暗色主题
+- **glTF 场景导入** — 支持 PBR 材质、双面材质、自发光材质
+- **场景图 & 组件系统** — Camera / Sun / LocalLights / MeshRenderer 组件，支持父子层级
+- **可选 DLSS 支持** — 通过 `dlss` feature flag 启用 NVIDIA DLSS 超分
 
-For more context, check out our [announcement article on Embark's Medium](https://medium.com/embarkstudios/homegrown-rendering-with-rust-1e39068e56a7). You'll also get to learn how this renderer connects to our rendering work, and the [`rust-gpu`](https://github.com/EmbarkStudios/rust-gpu) project!
+## 系统要求
 
-![image (5)](https://user-images.githubusercontent.com/16522064/146789417-0cc84f60-157d-4a7d-99f5-79122c1fa982.png)
-_Ruins environment rendered in Dist Render. [Scene](https://www.unrealengine.com/marketplace/en-US/product/modular-ruins-c) by Crebotoly_
+| 项目 | 要求 |
+|------|------|
+| 操作系统 | Windows 10/11 (64-bit) |
+| GPU | 支持 Vulkan 1.2 + Ray Tracing 的显卡 (NVIDIA RTX 20 系列及以上) |
+| Rust | stable 工具链 (推荐 1.75+) |
+| 磁盘 | 约 2 GB（含资产和编译缓存） |
 
-## Features
+## 快速开始
 
-* Hybrid rendering using a mixture of raster, compute, and ray-tracing
-* Dynamic global illumination
-  * Fully dynamic geometry and lighting without precomputation
-  * Volumetric temporally-recurrent irradiance cache for "infinite" bounces
-  * Ray-traced diffuse final gather for high-frequency details
-  * Ray-traced specular, falling back to diffuse after the first hit
-* Sun with ray-traced soft shadows
-* Standard PBR with GGX and roughness/metalness
-  * Energy-preserving multi-scattering BRDF
-* Reference path-tracing mode
-* Temporal super-resolution and anti-aliasing
-* Natural tone mapping
-* Physically-based glare
-* Basic motion blur
-* Contrast-adaptive sharpening
-* Optional DLSS support
-* glTF mesh loading (no animations yet)
-* A render graph running it all
+### 1. 克隆仓库
 
-## Technical details
-
-* [Global illumination overview](docs/gi-overview.md)
-* Repository highlights:
-  * HLSL shaders: [`assets/shaders/`](assets/shaders)
-  * Rust shaders: [`crates/lib/rust-shaders/`](crates/lib/rust-shaders)
-  * Main render graph passes: [`world_render_passes.rs`](crates/lib/dist-render/src/world_render_passes.rs)
-
-## Primary platforms
-
-Dist Render currently works on a limited range of operating systems and hardware.
-
-Hardware:
-
-* Nvidia RTX series
-* Nvidia GTX 1060 and newer _with 6+ GB of VRAM_ (slow: driver-emulated ray-tracing)
-* AMD Radeon RX 6000 series
-
-Operating systems:
-
-* Windows
-* Linux
-
-## Secondary Platforms
-
-Dist Render has a rudimentary "RTX Off" mode which runs on a wider range of systems, but most of its visual features are disabled.
-
-Hardware:
-
-* Older GPUs with support for Vulkan 1.2
-
-Operating systems:
-
-* macOS
-
-## Dependencies
-
-### (Some) Linux dependencies
-
-* `uuid-dev`
-* In case the bundled `libdxcompiler.so` doesn't work: <https://github.com/microsoft/DirectXShaderCompiler#downloads>
-
-### (Some) MacOS dependencies
-
-* `ossp-uuid` (`brew install ossp-uuid`)
-
-## Building and running
-
-To build Dist Render [you need Rust](https://www.rust-lang.org/tools/install).
-
-Once Rust is installed, open a command prompt in the project folder, then build and run the renderer app via:
-
+```bash
+git clone <repo-url> DistRender
+cd DistRender
 ```
+
+### 2. 编译并运行
+
+```bash
+# Debug 模式运行（默认加载 pica 场景）
+cargo run --bin renderer
+
+# Release 模式运行（推荐，性能更好）
 cargo run --bin renderer --release
 ```
 
-This will compile a binary in the `target/release` folder, and then run it.
+### 3. 指定场景
 
-For a list of supported command-line switches see `--help`. In order to pass it through `cargo` to the renderer, you need to separate the `cargo` arguments from `renderer` arguments using `--` e.g.:
-
-```
-cargo run --bin renderer --release -- --help
+```bash
+cargo run --bin renderer -- --scene assets/scenes/pica.ron
 ```
 
-## Loading assets
+### 4. 直接加载 glTF 模型
 
-Dist Render supports meshes in the [glTF 2.0](https://github.com/KhronosGroup/glTF) format, and also has its own tiny [RON](https://github.com/ron-rs/ron)-based scene format which can refer to multiple glTF 2.0 meshes.
+```bash
+cargo run --bin renderer -- --mesh assets/meshes/cornell_box/scene.gltf --mesh-scale 1.0
+```
 
-To load either, simply drag-n-drop the `.gltf`, `.glb`, or `.ron` file onto the window of the `renderer` app. See the `assets/` folder for a few bundled examples.
+## 命令行参数
 
-The first time a mesh is loaded, it is converted to a runtime format: the vertices are packed, and textures are compressed. The next time the same mesh is used, it's loaded from the `cache/` folder.
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--width` | `1920` | 窗口宽度 |
+| `--height` | `1080` | 窗口高度 |
+| `--scene <path>` | — | `.ron` 场景描述文件路径 |
+| `--mesh <path>` | — | 直接加载单个 glTF/mesh 文件 |
+| `--mesh-scale <f32>` | `1.0` | 模型缩放系数 |
+| `--temporal-upsampling <f32>` | `1.0` | 时序上采样比例 |
+| `--no-vsync` | `false` | 关闭垂直同步 |
+| `--fullscreen` | `false` | 全屏模式 |
+| `--graphics-debugging` | `false` | 启用 Vulkan 验证层 |
+| `--physical-device-index <n>` | — | 指定 GPU 设备索引 |
+| `--keymap <path>` | — | 自定义键位配置文件 |
+| `--no-window-decorations` | `false` | 无边框窗口 |
 
-Please note that only the roughness-metalness workflow in glTF is supported. In Blender that corresponds to _Principled BSDF_.
+## 内置场景
 
-Dist Render can also load image-based lights ([examples](http://www.hdrlabs.com/sibl/archive.html)). To do so, drag-n-drop an `.exr` or `.hdr` file onto window of the `renderer` app.
+`assets/scenes/` 目录下提供以下预配置场景：
 
-The loaded assets can be manipulated in the `Scene` section of the UI. The app state is persisted in `renderer_state.ron`.
+| 场景文件 | 说明 |
+|----------|------|
+| `pica.ron` | Pica Pica 微缩场景 (默认) |
+| `conference.ron` | 会议室场景 |
+| `cornell_box.ron` | Cornell Box 经典测试场景 |
+| `battle.ron` | 战斗场景 |
+| `mini_battle.ron` | 缩小版战斗场景 |
+| `car.ron` | 汽车场景 |
+| `gas_stations.ron` | 加油站场景 |
+| `roughness-scale.ron` | 粗糙度梯度测试 |
+| `viziers.ron` | 观景台场景 |
 
-## Controls in the `renderer` app
+## 项目结构
 
-* WSAD, QE - movement
-* Mouse + RMB - rotate the camera
-* Mouse + LMB - rotate the sun
-* Shift - move faster
-* Ctrl - move slower
-* Space - switch to reference path tracing
-* Tab - show/hide the UI
+```
+DistRender/
+├── Cargo.toml                  # workspace 根配置
+├── assets/
+│   ├── fonts/                  # UI 字体
+│   ├── images/                 # 蓝噪声等纹理
+│   ├── meshes/                 # glTF 模型资产
+│   ├── rust-shaders-compiled/  # 预编译 Rust-GPU 着色器
+│   ├── scenes/                 # .ron 场景描述文件
+│   └── shaders/                # HLSL 着色器源码
+│       ├── rt/                 # 光线追踪着色器
+│       ├── rtdgi/              # 漫反射 GI
+│       ├── rtr/                # 镜面反射
+│       ├── ssgi/               # 屏幕空间 GI
+│       ├── taa/                # 时序抗锯齿
+│       ├── shadow_denoise/     # 阴影降噪
+│       ├── sky/                # 天空模型
+│       ├── lighting/           # 光照计算
+│       ├── ibl/                # 环境光照
+│       ├── ircache/            # 辐照度缓存
+│       ├── wrc/                # 世界辐射缓存
+│       ├── motion_blur/        # 运动模糊
+│       ├── dof/                # 景深
+│       ├── post/               # 后处理
+│       └── ...
+├── cache/                      # 烘焙后的资产缓存
+├── crates/
+│   ├── bin/
+│   │   ├── renderer/           # 主渲染器 / 编辑器应用
+│   │   └── bake/               # 离线资产烘焙工具
+│   └── lib/
+│       ├── dist-render/            # 渲染核心 (render passes 编排)
+│       ├── dist-render-backend/    # Vulkan/ash 后端
+│       ├── dist-render-rg/         # 渲染图 (Render Graph)
+│       ├── dist-render-asset/      # 资产类型定义
+│       ├── dist-render-asset-pipe/ # 资产处理管线
+│       ├── dist-render-simple/     # 上层简化 API
+│       ├── dist-render-egui/       # egui 渲染后端
+│       ├── rust-shaders/           # Rust-GPU 着色器
+│       └── rust-shaders-shared/    # CPU/GPU 共享类型
+└── docs/                       # 文档
+```
 
-## Resolution scaling
+## 资产烘焙
 
-### DPI
+大型 glTF 模型首次加载后会自动缓存到 `cache/` 目录。也可手动预烘焙：
 
-For the `renderer` app, DPI scaling in the operating system affects the physical number of pixels of the rendering output. The `--width` and `--height` parameters correspond to _logical_ window size **and** the internal rendering resolution. Suppose the OS uses DPI scaling of `1.5`, and the app is launched with `--width 1000`, the actual physical width of the window will be `1500` px. Rendering will still happen at `1000` px, with upscaling to `1500` px at the very end, via a Catmull-Rom kernel.
+```bash
+cargo run --bin bake -- --scene assets/scenes/pica.ron -o pica_baked
+```
 
-### Temporal upsampling
+> **注意**：修改材质标志（如双面材质）后需要删除 `cache/*.mesh` 文件以触发重新烘焙。
 
-Dist Render can also render at a reduced internal resolution, and reconstruct a larger image via temporal upsampling, trading quality for performance. A custom temporal super-resolution algorithm is used by default, and [DLSS is supported](docs/using-dlss.md) on some platforms. Both approaches result in better quality than what could be achieved by simply spatially scaling up the image at the end.
+## 编辑器操作
 
-For example, `--width 1920 --height 1080 --temporal-upsampling 1.5` will produce a `1920x1080` image by upsampling by a factor of `1.5` from `1280x720`. Most of the rendering will then happen with `1.5 * 1.5 = 2.25` times fewer pixels, resulting in an _almost_ 2x speedup.
+| 操作 | 按键 |
+|------|------|
+| 显示/隐藏 UI | 由 keymap 配置决定 |
+| 摄像机移动 | `W` `A` `S` `D` + 鼠标右键 |
+| 摄像机升降 | `Q` / `E` |
+| 拖拽 IBL 环境贴图 | 将 `.hdr` / `.exr` 文件拖入窗口 |
+| 选择物体 | 在 Viewport 中左键点击 |
+| 移动选中物体 | 拖拽 Gizmo 轴 |
 
-## Technical guides
+Inspector 面板可编辑：
+- **场景级**：曝光、环境光、光照、渲染设置
+- **物体级**：Transform（位置/旋转/缩放）、组件属性（Camera / Sun / LocalLights / MeshRenderer）
 
-* [Using DLSS](docs/using-dlss.md)
-* [Working on Rust shaders](docs/rust-shaders.md)
-* [Using `dist-render` as a crate](docs/using-dist-render.md)
+## 可选功能
 
-## Known issues
+通过 Cargo feature flags 启用：
 
-* Vulkan API usage is extremely basic. Resources are usually not released, and barriers aren't optimal.
-* There are hard limit on mesh data and instance counts. Exceeding those limits will result in panics and Vulkan validation errors / driver crashes.
-* Window (framebuffer) resizing is not yet implemented.
-* Denoising needs more work (always).
+```bash
+# 启用 NVIDIA DLSS
+cargo run --bin renderer --features dlss
 
-## Acknowledgments
+# 启用 puffin 性能分析服务器
+cargo run --bin renderer --features puffin-server
+```
 
-This project is made possible by the awesome open source Rust community, and benefits from a multitude of crates 💖🦀
+## 许可证
 
-Special shout-outs go to:
+本项目基于 [Embark Studios / kajiya](https://github.com/EmbarkStudios/kajiya) 开发，采用双许可证：
 
-* Felix Westin for his [MinimalAtmosphere](https://github.com/Fewes/MinimalAtmosphere), which this project uses for sky rendering.
-* AMD, especially Dominik Baumeister and Guillaume Boissé for the [FidelityFX Shadow Denoiser](https://gpuopen.com/fidelityfx-denoiser/), which forms the basis of shadow denoising in Dist Render.
-* Maik Klein for the Vulkan wrapper [ash](https://github.com/MaikKlein/ash), making it easy for Dist Render to talk to the GPU.
-* Traverse Research and Jasper Bekkers for a number of highly relevant crates:
-  * Bindings to the DXC shader compiler: [hassle-rs](https://github.com/Traverse-Research/hassle-rs)
-  * SPIR-V reflection utilities: [rspirv-reflect](https://github.com/Traverse-Research/rspirv-reflect)
-  * Vulkan memory management: [gpu-allocator](https://github.com/Traverse-Research/gpu-allocator)
-  * Blue noise sampling: [blue-noise-sampler](https://github.com/Jasper-Bekkers/blue-noise-sampler)
-* Troy Sobotka for guidance and mind-bending discussions about color.
+- [Apache License 2.0](LICENSE-APACHE)
+- [MIT License](LICENSE-MIT)
 
-## Contribution
-
-[![Contributor Covenant](https://img.shields.io/badge/contributor%20covenant-v1.4-ff69b4.svg)](../main/CODE_OF_CONDUCT.md)
-
-We welcome community contributions to this project.
-
-Please read our [Contributor Guide](CONTRIBUTING.md) for more information on how to get started.
-Please also read our [Contributor Terms](CONTRIBUTING.md#contributor-terms) before you make any contributions.
-
-Any contribution intentionally submitted for inclusion in an Embark Studios project, shall comply with the Rust standard licensing model (MIT OR Apache 2.0) and therefore be dual licensed as described below, without any additional terms or conditions:
-
-### License
-
-This contribution is dual licensed under EITHER OF
-
-* Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
-* MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
-
-at your option.
-
-For clarity, "your" refers to Embark or any other licensee/user of the contribution.
+Copyright (c) 2019 Embark Studios

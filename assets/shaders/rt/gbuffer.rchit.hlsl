@@ -93,6 +93,7 @@ void main(inout GbufferRayPayload payload: SV_RayPayload, in RayHitAttrib attrib
 
     uint material_id = vertices.Load(ind.x * sizeof(uint) + mesh.vertex_mat_offset);
     MeshMaterial material = vertices.Load<MeshMaterial>(mesh.mat_data_offset + material_id * sizeof(MeshMaterial));
+    InstanceDynamicConstants instance_params = instance_dynamic_parameters_dyn[InstanceIndex()];
 
     float2 albedo_uv = transform_material_uv(material, uv, 0);
     const BindlessTextureWithLod albedo_tex =
@@ -101,15 +102,16 @@ void main(inout GbufferRayPayload payload: SV_RayPayload, in RayHitAttrib attrib
     float3 albedo =
         albedo_tex.tex.SampleLevel(sampler_llr, albedo_uv, albedo_tex.lod).xyz
         * float4(material.base_color_mult).xyz
+        * instance_params.base_color_tint.xyz
         * v_color.rgb;
 
     float2 spec_uv = transform_material_uv(material, uv, 2);
     const BindlessTextureWithLod spec_tex =
         compute_texture_lod(material.spec_map, lod_triangle_constant, WorldRayDirection(), surf_normal_ws, cone_width);
     float4 metalness_roughness = spec_tex.tex.SampleLevel(sampler_llr, spec_uv, spec_tex.lod);
-    float perceptual_roughness = material.roughness_mult * metalness_roughness.x;
+    float perceptual_roughness = material.roughness_mult * metalness_roughness.x * instance_params.roughness_multiplier;
     float roughness = clamp(perceptual_roughness_to_roughness(perceptual_roughness), 1e-4, 1.0);
-    float metalness = metalness_roughness.y * material.metalness_factor;
+    float metalness = saturate(metalness_roughness.y * material.metalness_factor * instance_params.metalness_multiplier);
 
     if (frame_constants.render_overrides.has_flag(RenderOverrideFlags::NO_METAL)) {
         metalness = 0;
@@ -179,7 +181,7 @@ void main(inout GbufferRayPayload payload: SV_RayPayload, in RayHitAttrib attrib
         emissive = 1.0.xxx
             * emissive_tex.tex.SampleLevel(sampler_llr, emissive_uv, emissive_tex.lod).rgb
             * float3(material.emissive)
-            * instance_dynamic_parameters_dyn[InstanceIndex()].emissive_multiplier
+            * instance_params.emissive_multiplier
             * frame_constants.pre_exposure;
     }
 

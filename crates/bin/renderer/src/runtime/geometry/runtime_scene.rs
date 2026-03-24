@@ -74,9 +74,11 @@ impl RuntimeScene {
                 };
 
                 world_renderer.set_instance_transform(instance, world_transform);
-                world_renderer
-                    .get_instance_dynamic_parameters_mut(instance)
-                    .emissive_multiplier = if options.emissive_enabled {
+                let dynamic_parameters = world_renderer.get_instance_dynamic_parameters_mut(instance);
+                dynamic_parameters.base_color_tint = mesh_renderer.base_color_tint;
+                dynamic_parameters.roughness_multiplier = mesh_renderer.roughness_multiplier;
+                dynamic_parameters.metalness_multiplier = mesh_renderer.metalness_multiplier;
+                dynamic_parameters.emissive_multiplier = if options.emissive_enabled {
                     options.global_emissive_multiplier * mesh_renderer.emissive_multiplier
                 } else {
                     0.0
