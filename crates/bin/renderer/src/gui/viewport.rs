@@ -199,9 +199,9 @@ impl RuntimeState {
 
     fn axis_color(axis: ViewportGizmoAxis) -> Color32 {
         match axis {
-            ViewportGizmoAxis::X => Color32::from_rgb(235, 87, 87),
-            ViewportGizmoAxis::Y => Color32::from_rgb(111, 207, 107),
-            ViewportGizmoAxis::Z => Color32::from_rgb(86, 156, 255),
+            ViewportGizmoAxis::X => Self::axis_x_color(),
+            ViewportGizmoAxis::Y => Self::axis_y_color(),
+            ViewportGizmoAxis::Z => Self::axis_z_color(),
         }
     }
 
@@ -211,14 +211,38 @@ impl RuntimeState {
         persisted: &mut PersistedState,
         ctx: &mut FrameContext,
     ) {
+        // Viewport toolbar
         ui.horizontal(|ui| {
-            ui.heading("Viewport");
-            ui.colored_label(
-                Self::muted_color(),
-                format!("{}x{}", ctx.render_extent[0], ctx.render_extent[1]),
+            ui.add_space(4.0);
+            // Accent bar
+            let (rect, _) = ui.allocate_exact_size(
+                egui::vec2(3.0, 16.0),
+                egui::Sense::hover(),
+            );
+            ui.painter().rect_filled(rect, 1.5, Self::accent_color());
+            ui.add_space(4.0);
+            ui.add(
+                egui::Label::new("Viewport")
+                    .heading()
+                    .text_color(Self::text_bright()),
+            );
+            ui.add_space(8.0);
+            ui.add(
+                egui::Label::new(format!("{}x{}", ctx.render_extent[0], ctx.render_extent[1]))
+                    .small()
+                    .text_color(Self::text_dim()),
             );
         });
-        ui.separator();
+        // Thin separator line
+        let sep_rect = ui.available_rect_before_wrap();
+        ui.painter().line_segment(
+            [
+                egui::pos2(sep_rect.left(), sep_rect.top()),
+                egui::pos2(sep_rect.right(), sep_rect.top()),
+            ],
+            egui::Stroke::new(1.0, Self::border_color()),
+        );
+        ui.add_space(2.0);
 
         let available = ui.available_size();
         if available.x <= 1.0 || available.y <= 1.0 {

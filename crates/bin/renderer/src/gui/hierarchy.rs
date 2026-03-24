@@ -10,27 +10,6 @@ impl RuntimeState {
             .join(", ")
     }
 
-    fn hierarchy_label(game_object: &GameObject, depth: usize, has_children: bool) -> String {
-        let mut label = String::new();
-        label.push_str(&"    ".repeat(depth));
-        label.push_str(if has_children { "> " } else { "- " });
-
-        if !game_object.enabled {
-            label.push_str("[off] ");
-        }
-
-        label.push_str(&game_object.name);
-
-        let component_summary = Self::game_object_component_summary(game_object);
-        if !component_summary.is_empty() {
-            label.push_str(" [");
-            label.push_str(&component_summary);
-            label.push(']');
-        }
-
-        label
-    }
-
     fn draw_hierarchy_node(
         &mut self,
         ui: &mut egui::Ui,
@@ -38,7 +17,7 @@ impl RuntimeState {
         game_object_id: GameObjectId,
         depth: usize,
     ) {
-        let Some((label, child_ids, is_builtin)) = scene
+        let Some((game_object_name, component_summary, child_ids, is_builtin, is_enabled)) = scene
             .find_game_object(game_object_id)
             .map(|game_object| {
                 let child_ids: Vec<_> = scene
@@ -49,27 +28,85 @@ impl RuntimeState {
                     .collect();
 
                 (
-                    Self::hierarchy_label(game_object, depth, !child_ids.is_empty()),
+                    game_object.name.clone(),
+                    Self::game_object_component_summary(game_object),
                     child_ids,
                     game_object.is_builtin(),
+                    game_object.enabled,
                 )
             })
         else {
             return;
         };
 
-        ui.horizontal(|ui| {
-            ui.add_space(depth as f32 * 14.0);
+        let selected = self.selected_game_object == Some(game_object_id);
+        let has_children = !child_ids.is_empty();
 
-            let selected = self.selected_game_object == Some(game_object_id);
-            let response = ui.selectable_label(selected, label);
-            if response.clicked() {
-                self.selected_game_object = Some(game_object_id);
-            }
+        // Row with subtle alternating/hover background
+        let row_frame = if selected {
+            egui::Frame::none()
+                .fill(Color32::from_rgba_premultiplied(66, 135, 245, 45))
+                .corner_radius(3.0)
+                .margin(egui::vec2(2.0, 1.0))
+        } else {
+            egui::Frame::none()
+                .corner_radius(3.0)
+                .margin(egui::vec2(2.0, 1.0))
+        };
 
-            if is_builtin {
-                ui.colored_label(Self::muted_color(), "builtin");
-            }
+        row_frame.show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.add_space(depth as f32 * 18.0);
+
+                // Tree connector
+                let tree_icon = if has_children { "\u{25B8}" } else { "  " };
+                ui.add(egui::Label::new(tree_icon).text_color(Self::text_dim()));
+
+                // Enabled/disabled indicator
+                let name_color = if !is_enabled {
+                    Self::text_dim()
+                } else if selected {
+                    Self::text_bright()
+                } else {
+                    Self::text_normal()
+                };
+
+                let response = ui.selectable_label(selected, "");
+                // Draw the name manually for the color
+                let name_rect = response.rect;
+                ui.painter().text(
+                    name_rect.left_center() + egui::vec2(4.0, 0.0),
+                    egui::Align2::LEFT_CENTER,
+                    &game_object_name,
+                    egui::TextStyle::Body,
+                    name_color,
+                );
+
+                if response.clicked() {
+                    self.selected_game_object = Some(game_object_id);
+                }
+
+                // Component tags
+                if !component_summary.is_empty() {
+                    ui.add(
+                        egui::Label::new(component_summary)
+                            .small()
+                            .text_color(Self::muted_color()),
+                    );
+                }
+
+                if is_builtin {
+                    Self::badge(ui, "builtin");
+                }
+
+                if !is_enabled {
+                    ui.add(
+                        egui::Label::new("off")
+                            .small()
+                            .text_color(Self::text_dim()),
+                    );
+                }
+            });
         });
 
         for child_id in child_ids {
@@ -77,33 +114,59 @@ impl RuntimeState {
         }
     }
 
-    pub(super) fn draw_hierarchy_panel(&mut self, ui: &mut egui::Ui, persisted: &mut PersistedState) {
-        ui.heading("Hierarchy");
-        ui.colored_label(
-            Self::muted_color(),
-            format!("{} game objects", persisted.scene.game_objects.len()),
-        );
-        ui.label("Reparenting lives in the Inspector Parent selector.");
-        ui.add_space(8.0);
+    pub(super) fn draw_hierarchy_panel(
+        &mut self,
+        ui: &mut egui::Ui,
+        persisted: &mut PersistedState,
+    ) {
+        // Panel header
+        Self::panel_title(ui, "Hierarchy");
 
         ui.horizontal(|ui| {
-            if ui
-                .selectable_label(self.selected_game_object.is_none(), "Scene")
-                .clicked()
-            {
-                self.selected_game_object = None;
-            }
+            Self::badge(ui, &format!("{}", persisted.scene.game_objects.len()));
+            ui.add(
+                egui::Label::new("game objects")
+                    .small()
+                    .text_color(Self::muted_color()),
+            );
+        });
+        ui.add_space(4.0);
 
-            if ui.button("Create Empty").clicked() {
-                let name = format!("GameObject {}", persisted.scene.next_game_object_id);
-                let game_object_id =
-                    persisted.scene.create_game_object(name, SceneElementTransform::IDENTITY);
-                self.selected_game_object = Some(game_object_id);
-            }
+        // Toolbar row
+        Self::section_frame().show(ui, |ui| {
+            ui.horizontal(|ui| {
+                let scene_selected = self.selected_game_object.is_none();
+                if ui.selectable_label(scene_selected, "Scene Root").clicked() {
+                    self.selected_game_object = None;
+                }
+
+                ui.separator();
+
+                if Self::accent_button(ui, "+ Create Empty").clicked() {
+                    let name =
+                        format!("GameObject {}", persisted.scene.next_game_object_id);
+                    let game_object_id = persisted
+                        .scene
+                        .create_game_object(name, SceneElementTransform::IDENTITY);
+                    self.selected_game_object = Some(game_object_id);
+                }
+            });
         });
 
-        ui.separator();
+        ui.add_space(4.0);
 
+        // Separator line
+        let separator_rect = ui.available_rect_before_wrap();
+        ui.painter().line_segment(
+            [
+                egui::pos2(separator_rect.left(), separator_rect.top()),
+                egui::pos2(separator_rect.right(), separator_rect.top()),
+            ],
+            egui::Stroke::new(1.0, Self::border_color()),
+        );
+        ui.add_space(4.0);
+
+        // Tree view
         egui::ScrollArea::vertical().show(ui, |ui| {
             let root_ids: Vec<_> = persisted
                 .scene
