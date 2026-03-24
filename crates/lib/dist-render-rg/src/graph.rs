@@ -917,6 +917,15 @@ impl<'exec_params, 'constants> ExecutingRenderGraph<'exec_params, 'constants> {
         }
     }
 
+    /// Retire the render graph without recording presentation passes.
+    /// Used when swapchain acquire fails (e.g. after window resize/maximize).
+    #[must_use]
+    pub fn retire_without_presentation(self) -> RetiredRenderGraph {
+        RetiredRenderGraph {
+            resources: self.resource_registry.resources,
+        }
+    }
+
     fn record_pass_cb(
         pass: RecordedPass,
         resource_registry: &mut ResourceRegistry,
@@ -1152,8 +1161,8 @@ impl RetiredRenderGraph {
                 }
                 AnyRenderResource::ImportedImage(_)
                 | AnyRenderResource::ImportedBuffer(_)
-                | AnyRenderResource::ImportedRayTracingAcceleration(_) => {},
-                AnyRenderResource::Pending { .. } => panic!("RetiredRenderGraph::release_resources called while a resource was in Pending state"),
+                | AnyRenderResource::ImportedRayTracingAcceleration(_)
+                | AnyRenderResource::Pending { .. } => {},
             }
         }
     }

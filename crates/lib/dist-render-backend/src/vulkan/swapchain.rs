@@ -304,11 +304,9 @@ impl Swapchain {
             ..self.desc
         };
 
-        let mut new_swapchain = std::mem::ManuallyDrop::new(
-            Self::new(&self.device, &self.surface, new_desc)?
-        );
-
-        // Destroy old resources
+        // Destroy old resources first — caller must have called device_wait_idle()
+        // before this. We must destroy the old swapchain before creating a new one
+        // on the same surface, otherwise Vulkan returns ERROR_NATIVE_WINDOW_IN_USE_KHR.
         unsafe {
             for &sem in &self.acquire_semaphores {
                 self.device.raw.destroy_semaphore(sem, None);
@@ -318,6 +316,10 @@ impl Swapchain {
             }
             self.fns.destroy_swapchain(self.raw, None);
         }
+
+        let mut new_swapchain = std::mem::ManuallyDrop::new(
+            Self::new(&self.device, &self.surface, new_desc)?
+        );
 
         // Move new resources into self
         self.raw = new_swapchain.raw;

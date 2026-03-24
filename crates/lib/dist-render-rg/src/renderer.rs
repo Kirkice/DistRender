@@ -40,6 +40,8 @@ pub struct Renderer {
 
     compiled_rg: Option<CompiledRenderGraph>,
     temporal_rg_state: TemporalRg,
+
+    pub swapchain_needs_recreation: bool,
 }
 
 lazy_static::lazy_static! {
@@ -110,6 +112,7 @@ impl Renderer {
 
             compiled_rg: None,
             temporal_rg_state: Default::default(),
+            swapchain_needs_recreation: false,
         })
     }
 
@@ -216,10 +219,42 @@ impl Renderer {
         // Now that we've done the main submission and the GPU is busy, acquire the presentation image.
         // This can block, so we're doing it as late as possible.
 
-        let swapchain_image = swapchain
-            .acquire_next_image()
-            .ok()
-            .expect("swapchain image");
+        let swapchain_image = match swapchain.acquire_next_image() {
+            Ok(image) => image,
+            Err(_) => {
+                // Swapchain is out of date (e.g. window resized/maximized).
+                // We must still properly retire the render graph and finish the frame
+                // even though we can't present.
+                unsafe {
+                    let presentation_cb = &current_frame.presentation_command_buffer;
+                    raw_device.end_command_buffer(presentation_cb.raw).unwrap();
+                }
+
+                let retired_rg = executing_rg.retire_without_presentation();
+
+                // Wait for the main CB to finish before we allow the frame to be reused
+                unsafe {
+                    raw_device.wait_for_fences(
+                        &[current_frame.main_command_buffer.submit_done_fence],
+                        true,
+                        u64::MAX,
+                    ).unwrap();
+                }
+
+                self.temporal_rg_state = match std::mem::take(&mut self.temporal_rg_state) {
+                    TemporalRg::Inert(_) => {
+                        panic!("Trying to retire the render graph, but it's inert.");
+                    }
+                    TemporalRg::Exported(rg) => TemporalRg::Inert(rg.retire_temporal(&retired_rg)),
+                };
+
+                retired_rg.release_resources(&mut self.transient_resource_cache);
+                self.dynamic_constants.advance_frame();
+                self.device.finish_frame(current_frame);
+                self.swapchain_needs_recreation = true;
+                return;
+            }
+        };
 
         // Execute the rest of the render graph, and submit the presentation command buffer.
         let retired_rg = {

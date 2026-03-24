@@ -613,6 +613,15 @@ impl SimpleMainLoop {
                         },
                         &mut render_backend.swapchain,
                     );
+
+                    // If the swapchain became out-of-date during draw_frame
+                    // (e.g. window maximized), schedule a recreation for next frame.
+                    if rg_renderer.swapchain_needs_recreation {
+                        rg_renderer.swapchain_needs_recreation = false;
+                        let size = window.inner_size();
+                        swapchain_resize_pending = Some([size.width, size.height]);
+                    }
+
                     world_renderer.retire_frame();
                     last_error_text = None;
                 }

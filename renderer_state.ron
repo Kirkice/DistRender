@@ -16,7 +16,7 @@
         items: [],
     ),
     scene: (
-        next_game_object_id: 5,
+        next_game_object_id: 4,
         game_objects: [
             (
                 id: 1,
@@ -26,7 +26,7 @@
                 parent: None,
                 transform: (
                     position: (1, 1, 1),
-                    rotation_euler_degrees: (-0, 0, 0),
+                    rotation_euler_degrees: (-29.10019, 48.599953, -0.0000009771143),
                     scale: (1, 1, 1),
                 ),
                 components: [
@@ -80,29 +80,6 @@
                         count: 0,
                         distance: 1.5,
                         multiplier: 10,
-                    ),
-                ],
-            ),
-            (
-                id: 4,
-                name: "pica pica mini diorama 01",
-                enabled: true,
-                builtin: None,
-                parent: None,
-                transform: (
-                    position: (0, 0, 0),
-                    rotation_euler_degrees: (0, 0, 0),
-                    scale: (0.1, 0.1, 0.1),
-                ),
-                components: [
-                    (
-                        type: "mesh_renderer",
-                        source: File("\\\\?\\H:\\Project\\DistRender\\assets\\meshes\\pica_pica_-_mini_diorama_01\\scene.gltf"),
-                        enabled: true,
-                        base_color_tint: (1, 1, 1, 1),
-                        roughness_multiplier: 1,
-                        metalness_multiplier: 1,
-                        emissive_multiplier: 1,
                     ),
                 ],
             ),

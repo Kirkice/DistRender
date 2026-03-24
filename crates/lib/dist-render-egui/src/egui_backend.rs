@@ -231,7 +231,13 @@ impl EguiBackend {
 
 impl EguiBackendInner {
     fn create_graphics_resources(&mut self, device: &Device, surface_resolution: [u32; 2]) {
-        assert!(self.gfx.is_none());
+        // Destroy old graphics resources if they exist (e.g. on swapchain recreation)
+        if let Some(old_gfx) = self.gfx.take() {
+            unsafe {
+                device.raw.destroy_framebuffer(old_gfx.egui_framebuffer, None);
+                device.raw.destroy_render_pass(old_gfx.egui_render_pass, None);
+            }
+        }
 
         let egui_render_pass = create_egui_render_pass(&device.raw);
         let (egui_framebuffer, egui_texture) =
