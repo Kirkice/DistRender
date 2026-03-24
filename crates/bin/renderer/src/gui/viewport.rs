@@ -214,9 +214,10 @@ impl RuntimeState {
         // Viewport toolbar
         ui.horizontal(|ui| {
             ui.add_space(4.0);
-            // Accent bar
+            // Accent bar height matches heading font for proper vertical alignment
+            let bar_height = ui.fonts().row_height(egui::TextStyle::Heading);
             let (rect, _) = ui.allocate_exact_size(
-                egui::vec2(3.0, 16.0),
+                egui::vec2(3.0, bar_height),
                 egui::Sense::hover(),
             );
             ui.painter().rect_filled(rect, 1.5, Self::accent_color());

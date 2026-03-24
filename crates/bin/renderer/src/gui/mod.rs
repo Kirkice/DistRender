@@ -176,9 +176,10 @@ impl RuntimeState {
     fn panel_title(ui: &mut egui::Ui, title: &str) {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            // Accent bar
+            // Accent bar height matches heading font so bar and text are the same height
+            let bar_height = ui.fonts().row_height(egui::TextStyle::Heading);
             let (rect, _) = ui.allocate_exact_size(
-                egui::vec2(3.0, 18.0),
+                egui::vec2(3.0, bar_height),
                 egui::Sense::hover(),
             );
             ui.painter().rect_filled(rect, 1.5, Self::accent_color());
