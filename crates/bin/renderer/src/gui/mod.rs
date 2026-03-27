@@ -1,6 +1,9 @@
+mod console;
 mod hierarchy;
 mod inspector;
 mod viewport;
+
+pub(super) use self::console::{ConsoleState, ConsoleFilter};
 
 pub(super) use dist_render::RenderOverrideFlags;
 pub(super) use dist_render::world_renderer::{
@@ -525,6 +528,20 @@ impl RuntimeState {
                     )
                     .show(egui_ctx, |ui| {
                         self.draw_inspector_panel(ui, persisted, ctx);
+                    });
+
+                egui::TopBottomPanel::bottom("console_panel")
+                    .default_height(180.0)
+                    .resizable(true)
+                    .height_range(80.0..=500.0)
+                    .frame(
+                        egui::Frame::none()
+                            .fill(Self::panel_fill())
+                            .margin(egui::vec2(10.0, 6.0))
+                            .stroke(egui::Stroke::new(1.0, Self::border_color())),
+                    )
+                    .show(egui_ctx, |ui| {
+                        self.draw_console_panel(ui);
                     });
 
                 egui::CentralPanel::default()

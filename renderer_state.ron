@@ -8,7 +8,7 @@
         contrast: 1,
     ),
     movement: (
-        camera_speed: 55.465313,
+        camera_speed: 10.749544,
         camera_smoothness: 1,
         sun_rotation_smoothness: 0,
     ),
@@ -25,8 +25,8 @@
                 builtin: Some(main_camera),
                 parent: None,
                 transform: (
-                    position: (-2.8496506, 3.8380756, 7.5734634),
-                    rotation_euler_degrees: (-27.901655, -12.900149, 0),
+                    position: (-0.269563, 1.8162456, 1.8094596),
+                    rotation_euler_degrees: (-23.000154, -32.700066, 0),
                     scale: (1, 1, 1),
                 ),
                 components: [

@@ -108,6 +108,9 @@ pub struct RuntimeState {
     /// Tracks which hierarchy nodes are expanded (by GameObjectId).
     pub hierarchy_expanded: HashSet<GameObjectId>,
 
+    /// Console panel state (log entries, filter, etc.).
+    pub console: crate::gui::ConsoleState,
+
     /// egui `TextureId::User` ids currently registered for material texture previews.
     /// Maps `(material_index, map_slot)` → user texture id.
     pub material_texture_ids: Vec<(usize, usize, egui::TextureId)>,
@@ -180,6 +183,7 @@ impl RuntimeState {
             gizmo_mode: GizmoMode::Translate,
 
             hierarchy_expanded: HashSet::new(),
+            console: Default::default(),
             material_texture_ids: Vec::new(),
             cached_material_infos: Vec::new(),
 

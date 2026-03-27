@@ -1,3 +1,28 @@
+use lazy_static::lazy_static;
+use std::sync::Mutex;
+
+/// A single log entry captured for the in-app console.
+#[derive(Clone)]
+pub struct LogEntry {
+    pub level: log::Level,
+    pub target: String,
+    pub message: String,
+    pub timestamp: String,
+}
+
+lazy_static! {
+    static ref LOG_BUFFER: Mutex<Vec<LogEntry>> = Mutex::new(Vec::new());
+}
+
+/// Maximum entries kept in the ring buffer.
+const MAX_LOG_ENTRIES: usize = 2048;
+
+/// Drain all new log entries since the last call (or all if first call).
+pub fn drain_log_entries() -> Vec<LogEntry> {
+    let mut buf = LOG_BUFFER.lock().unwrap();
+    std::mem::take(&mut *buf)
+}
+
 pub fn set_up_logging(default_log_level: log::LevelFilter) -> anyhow::Result<()> {
     use fern::colors::{Color, ColoredLevelConfig};
 
@@ -64,9 +89,31 @@ pub fn set_up_logging(default_log_level: log::LevelFilter) -> anyhow::Result<()>
                 .unwrap(),
         );
 
+    let gui_out = fern::Dispatch::new()
+        .format(move |out, message, record| {
+            let entry = LogEntry {
+                level: record.level(),
+                target: record.target().to_string(),
+                message: format!("{}", message),
+                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+            };
+            let mut buf = LOG_BUFFER.lock().unwrap();
+            buf.push(entry);
+            if buf.len() > MAX_LOG_ENTRIES {
+                let excess = buf.len() - MAX_LOG_ENTRIES;
+                buf.drain(..excess);
+            }
+            out.finish(format_args!(""));
+        })
+        .level(default_log_level)
+        .level_for("async_io", log::LevelFilter::Warn)
+        .level_for("polling", log::LevelFilter::Warn)
+        .chain(fern::Output::call(|_| {}));
+
     fern::Dispatch::new()
         .chain(console_out)
         .chain(file_out)
+        .chain(gui_out)
         .apply()
         .map_err(|err| anyhow::anyhow!("{:?}", err))
 }
