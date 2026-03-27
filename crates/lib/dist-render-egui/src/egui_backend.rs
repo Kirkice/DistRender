@@ -384,10 +384,10 @@ impl Renderer {
         let descriptor_pool = {
             let descriptor_pool_sizes = [vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                descriptor_count: 8,
+                descriptor_count: 256,
             }];
             let descriptor_pool_create_info = vk::DescriptorPoolCreateInfo::builder()
-                .max_sets(8)
+                .max_sets(256)
                 .pool_sizes(&descriptor_pool_sizes);
             unsafe { device.create_descriptor_pool(&descriptor_pool_create_info, None) }.unwrap()
         };

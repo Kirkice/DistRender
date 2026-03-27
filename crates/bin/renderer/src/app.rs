@@ -99,6 +99,8 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         state.load_scene(scene)?;
     } else if let Some(mesh) = opt.mesh.as_ref() {
         state.add_standalone_mesh(mesh.clone(), opt.mesh_scale)?;
+    } else {
+        state.load_scene(&PathBuf::from("assets/scenes/pica.ron"))?;
     }
 
     let state = state.run()?;

@@ -16,7 +16,29 @@ use super::GbufferDepth;
 pub struct UploadedTriMesh {
     pub index_buffer_offset: u64,
     pub index_count: u32,
+    /// Object-space axis-aligned bounding box (min corner, max corner).
+    pub aabb_min: [f32; 3],
+    pub aabb_max: [f32; 3],
 }
+
+/// Per-material display info stored after mesh loading.
+/// Map slot order: \[normal, metallic-roughness, albedo, emissive\].
+#[derive(Clone)]
+pub struct MeshMaterialInfo {
+    pub base_color_mult: [f32; 4],
+    pub roughness_mult: f32,
+    pub metalness_factor: f32,
+    pub emissive: [f32; 3],
+    /// GPU images for the 4 map slots.  `None` for tiny placeholder textures.
+    pub map_images: [Option<Arc<Image>>; 4],
+}
+
+pub const MATERIAL_MAP_NORMAL: usize = 0;
+pub const MATERIAL_MAP_SPEC: usize = 1;
+pub const MATERIAL_MAP_ALBEDO: usize = 2;
+pub const MATERIAL_MAP_EMISSIVE: usize = 3;
+
+pub const MATERIAL_MAP_NAMES: [&str; 4] = ["Normal", "Metallic-Roughness", "Albedo", "Emissive"];
 
 pub struct RasterMeshesData<'a> {
     pub meshes: &'a [UploadedTriMesh],

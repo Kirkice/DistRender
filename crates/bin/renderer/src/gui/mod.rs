@@ -3,6 +3,9 @@ mod inspector;
 mod viewport;
 
 pub(super) use dist_render::RenderOverrideFlags;
+pub(super) use dist_render::world_renderer::{
+    WorldRenderer, MATERIAL_MAP_NAMES,
+};
 pub(super) use dist_render_simple::*;
 pub(super) use egui::{self, Color32};
 
@@ -12,7 +15,7 @@ pub(super) use crate::{
             CameraComponent, GameObject, GameObjectId, LocalLightsComponent, SceneComponent,
             SceneElementTransform, SceneState, SunComponent,
         },
-        RuntimeState, ViewportGizmoAxis, ViewportGizmoDragState, MAX_CAMERA_SPEED,
+        RuntimeState, ViewportGizmoAxis, ViewportGizmoDragState, GizmoMode, MAX_CAMERA_SPEED,
         MAX_FPS_LIMIT, MIN_CAMERA_SPEED,
     },
     PersistedState,
@@ -423,6 +426,56 @@ impl RuntimeState {
             });
     }
 
+    /// Register material texture GPU images as egui user textures for the selected game object.
+    /// Uses `TextureId::User(100 + n)` for material map images.
+    fn register_material_textures(
+        &mut self,
+        persisted: &PersistedState,
+        ctx: &mut FrameContext,
+    ) {
+        self.material_texture_ids.clear();
+        self.cached_material_infos.clear();
+
+        let game_object_id = match self.selected_game_object {
+            Some(id) => id,
+            None => return,
+        };
+
+        let mesh_handle = match self.runtime_scene.game_object_mesh_handle(
+            &persisted.scene,
+            ctx.world_renderer,
+            game_object_id,
+        ) {
+            Some(h) => h,
+            None => return,
+        };
+
+        let material_infos = ctx.world_renderer.mesh_material_infos(mesh_handle);
+        self.cached_material_infos = material_infos.to_vec();
+
+        let egui_ctx = match ctx.egui.as_mut() {
+            Some(ec) => ec,
+            None => return,
+        };
+
+        // Cap texture registrations to avoid descriptor pool exhaustion.
+        const MAX_MATERIAL_TEXTURES: u64 = 64;
+        let mut next_slot = 100u64;
+        'outer: for (mat_idx, mat) in material_infos.iter().enumerate() {
+            for (slot, img_opt) in mat.map_images.iter().enumerate() {
+                if let Some(img) = img_opt {
+                    if next_slot - 100 >= MAX_MATERIAL_TEXTURES {
+                        break 'outer;
+                    }
+                    let texture_id = egui::TextureId::User(next_slot);
+                    egui_ctx.register_user_texture(texture_id, img.clone());
+                    self.material_texture_ids.push((mat_idx, slot, texture_id));
+                    next_slot += 1;
+                }
+            }
+        }
+    }
+
     // -- Main entry point ---------------------------------------------------
     pub fn do_gui(&mut self, persisted: &mut PersistedState, ctx: &mut FrameContext) {
         if self.keyboard.was_just_pressed(self.keymap_config.ui.toggle) {
@@ -437,6 +490,9 @@ impl RuntimeState {
         }
 
         if self.show_gui {
+            // Pre-register material textures for the selected object before the egui frame.
+            self.register_material_textures(persisted, ctx);
+
             ctx.egui.take().unwrap().frame(|egui_ctx| {
                 Self::apply_modern_style(egui_ctx);
 

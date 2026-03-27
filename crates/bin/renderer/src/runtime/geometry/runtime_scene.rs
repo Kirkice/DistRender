@@ -4,6 +4,7 @@ use std::{
     path::PathBuf,
 };
 
+use dist_render::world_renderer::MeshHandle;
 use super::super::{materials::SyncSceneOptions, *};
 
 #[derive(Default)]
@@ -13,6 +14,73 @@ pub struct RuntimeScene {
 }
 
 impl RuntimeScene {
+    /// Returns the world-space AABB `(min, max)` for a game object that has a MeshRenderer,
+    /// or `None` if the object has no mesh instance loaded.
+    pub fn game_object_world_aabb(
+        &self,
+        scene: &SceneState,
+        world_renderer: &WorldRenderer,
+        game_object_id: GameObjectId,
+    ) -> Option<([f32; 3], [f32; 3])> {
+        let game_object = scene.find_game_object(game_object_id)?;
+        let world_transform = scene.world_transform(game_object_id);
+
+        for (component_index, component) in game_object.components.iter().enumerate() {
+            if component.as_mesh_renderer().is_none() {
+                continue;
+            }
+
+            let binding_key = (game_object_id, component_index);
+            let instance = self.render_instances.get(&binding_key)?;
+            let mesh = world_renderer.instance_mesh(*instance);
+            let (obj_min, obj_max) = world_renderer.mesh_aabb(mesh);
+
+            // Transform the 8 corners of the object-space AABB to world space
+            // and compute the world-space AABB.
+            let corners = [
+                Vec3::new(obj_min[0], obj_min[1], obj_min[2]),
+                Vec3::new(obj_max[0], obj_min[1], obj_min[2]),
+                Vec3::new(obj_min[0], obj_max[1], obj_min[2]),
+                Vec3::new(obj_min[0], obj_min[1], obj_max[2]),
+                Vec3::new(obj_max[0], obj_max[1], obj_min[2]),
+                Vec3::new(obj_max[0], obj_min[1], obj_max[2]),
+                Vec3::new(obj_min[0], obj_max[1], obj_max[2]),
+                Vec3::new(obj_max[0], obj_max[1], obj_max[2]),
+            ];
+
+            let mut w_min = Vec3::splat(f32::MAX);
+            let mut w_max = Vec3::splat(f32::MIN);
+            for c in &corners {
+                let w = world_transform.transform_point3(*c);
+                w_min = w_min.min(w);
+                w_max = w_max.max(w);
+            }
+
+            return Some((w_min.into(), w_max.into()));
+        }
+
+        None
+    }
+
+    /// Returns the `MeshHandle` for a game object that has a MeshRenderer, or `None`.
+    pub fn game_object_mesh_handle(
+        &self,
+        scene: &SceneState,
+        world_renderer: &WorldRenderer,
+        game_object_id: GameObjectId,
+    ) -> Option<MeshHandle> {
+        let game_object = scene.find_game_object(game_object_id)?;
+        for (component_index, component) in game_object.components.iter().enumerate() {
+            if component.as_mesh_renderer().is_none() {
+                continue;
+            }
+            let binding_key = (game_object_id, component_index);
+            let instance = self.render_instances.get(&binding_key)?;
+            return Some(world_renderer.instance_mesh(*instance));
+        }
+        None
+    }
+
     pub fn clear(&mut self, world_renderer: &mut WorldRenderer) {
         for instance in self.render_instances.drain().map(|(_, instance)| instance) {
             world_renderer.remove_instance(instance);

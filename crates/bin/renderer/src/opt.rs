@@ -14,7 +14,7 @@ pub struct Opt {
     #[structopt(long, default_value = "1.0")]
     pub temporal_upsampling: f32,
 
-    #[structopt(long, default_value = "assets/scenes/pica.ron")]
+    #[structopt(long)]
     pub scene: Option<PathBuf>,
 
     #[structopt(long)]

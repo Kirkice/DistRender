@@ -50,6 +50,11 @@ pub struct EguiContext<'a> {
 
 #[cfg(feature = "egui")]
 impl<'a> EguiContext<'a> {
+    /// Register (or update) an `Arc<Image>` as an egui user texture.
+    pub fn register_user_texture(&mut self, texture_id: egui::TextureId, image: Arc<Image>) {
+        self.egui_backend.register_user_texture(texture_id, image);
+    }
+
     pub fn frame(self, callback: impl FnOnce(&egui::CtxRef)) {
         self.egui_backend.prepare_frame(self.window, self.egui);
         callback(self.egui);

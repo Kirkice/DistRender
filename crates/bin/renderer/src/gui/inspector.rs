@@ -120,6 +120,107 @@ impl RuntimeState {
                             10.0,
                         );
                     });
+
+                // Show per-material info with texture thumbnails.
+                if !self.cached_material_infos.is_empty() {
+                    ui.add_space(4.0);
+                    egui::CollapsingHeader::new("Materials")
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            let tex_ids = &self.material_texture_ids;
+                            for (mat_idx, mat_info) in
+                                self.cached_material_infos.iter().enumerate()
+                            {
+                                egui::CollapsingHeader::new(format!("Material {}", mat_idx))
+                                    .id_source(("mat", mat_idx))
+                                    .default_open(mat_idx == 0)
+                                    .show(ui, |ui| {
+                                        // Base color swatch
+                                        ui.horizontal(|ui| {
+                                            Self::prop_label(ui, "Base Color");
+                                            let c = mat_info.base_color_mult;
+                                            let color = Color32::from_rgb(
+                                                (c[0] * 255.0).clamp(0.0, 255.0) as u8,
+                                                (c[1] * 255.0).clamp(0.0, 255.0) as u8,
+                                                (c[2] * 255.0).clamp(0.0, 255.0) as u8,
+                                            );
+                                            let (rect, _) = ui.allocate_exact_size(
+                                                egui::vec2(14.0, 14.0),
+                                                egui::Sense::hover(),
+                                            );
+                                            ui.painter().rect_filled(
+                                                rect,
+                                                2.0,
+                                                color,
+                                            );
+                                            ui.add(
+                                                egui::Label::new(format!(
+                                                    "[{:.2}, {:.2}, {:.2}]",
+                                                    c[0], c[1], c[2]
+                                                ))
+                                                .small()
+                                                .text_color(Self::muted_color()),
+                                            );
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            Self::prop_label(ui, "Roughness");
+                                            ui.add(
+                                                egui::Label::new(format!(
+                                                    "{:.3}",
+                                                    mat_info.roughness_mult
+                                                ))
+                                                .text_color(Self::muted_color()),
+                                            );
+                                        });
+                                        ui.horizontal(|ui| {
+                                            Self::prop_label(ui, "Metalness");
+                                            ui.add(
+                                                egui::Label::new(format!(
+                                                    "{:.3}",
+                                                    mat_info.metalness_factor
+                                                ))
+                                                .text_color(Self::muted_color()),
+                                            );
+                                        });
+
+                                        let e = mat_info.emissive;
+                                        if e[0] > 0.0 || e[1] > 0.0 || e[2] > 0.0 {
+                                            ui.horizontal(|ui| {
+                                                Self::prop_label(ui, "Emissive");
+                                                ui.add(
+                                                    egui::Label::new(format!(
+                                                        "[{:.2}, {:.2}, {:.2}]",
+                                                        e[0], e[1], e[2]
+                                                    ))
+                                                    .text_color(Self::muted_color()),
+                                                );
+                                            });
+                                        }
+
+                                        ui.add_space(4.0);
+
+                                        // Texture thumbnails
+                                        for &(m_idx, slot, texture_id) in tex_ids {
+                                            if m_idx != mat_idx {
+                                                continue;
+                                            }
+                                            ui.horizontal(|ui| {
+                                                Self::prop_label(
+                                                    ui,
+                                                    MATERIAL_MAP_NAMES[slot],
+                                                );
+                                                ui.add(egui::Image::new(
+                                                    texture_id,
+                                                    egui::vec2(64.0, 64.0),
+                                                ));
+                                            });
+                                            ui.add_space(2.0);
+                                        }
+                                    });
+                            }
+                        });
+                }
             }
             SceneComponent::Camera(camera) => {
                 ui.checkbox(&mut camera.enabled, "Enabled");

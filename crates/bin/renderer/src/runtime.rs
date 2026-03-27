@@ -11,11 +11,12 @@ use anyhow::Context;
 use dolly::prelude::*;
 use dist_render::{
     rg::GraphDebugHook,
-    world_renderer::{AddMeshOptions, InstanceHandle, MeshHandle, WorldRenderer},
+    world_renderer::{AddMeshOptions, InstanceHandle, WorldRenderer},
 };
 use dist_render_simple::*;
+use egui;
 use log::{info, warn};
-use std::{fs::File, path::PathBuf};
+use std::{collections::HashSet, fs::File, path::PathBuf};
 
 use self::{
     component::{GameObject, GameObjectId, MeshSource, SceneElementTransform, SceneState},
@@ -53,6 +54,13 @@ impl ViewportGizmoAxis {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum GizmoMode {
+    Translate,
+    Rotate,
+    Scale,
+}
+
 #[derive(Clone, Copy)]
 pub struct ViewportGizmoDragState {
     pub game_object_id: GameObjectId,
@@ -61,6 +69,10 @@ pub struct ViewportGizmoDragState {
     pub screen_direction: Vec2,
     pub start_world_position: Vec3,
     pub pixels_per_unit: f32,
+    /// Snapshot of euler degrees at drag start (used for rotation gizmo).
+    pub start_rotation_euler: Vec3,
+    /// Snapshot of scale at drag start (used for scale gizmo).
+    pub start_scale: Vec3,
 }
 
 pub struct RuntimeState {
@@ -91,8 +103,18 @@ pub struct RuntimeState {
     pub viewport_keyboard_focused: bool,
     pub viewport_click_origin: Option<Vec2>,
     pub viewport_gizmo_drag: Option<ViewportGizmoDragState>,
+    pub gizmo_mode: GizmoMode,
 
-    runtime_scene: RuntimeScene,
+    /// Tracks which hierarchy nodes are expanded (by GameObjectId).
+    pub hierarchy_expanded: HashSet<GameObjectId>,
+
+    /// egui `TextureId::User` ids currently registered for material texture previews.
+    /// Maps `(material_index, map_slot)` → user texture id.
+    pub material_texture_ids: Vec<(usize, usize, egui::TextureId)>,
+    /// Cached material info for the selected game object's mesh (for inspector display).
+    pub cached_material_infos: Vec<dist_render::world_renderer::MeshMaterialInfo>,
+
+    pub(crate) runtime_scene: RuntimeScene,
 }
 
 enum SequencePlaybackState {
@@ -155,6 +177,11 @@ impl RuntimeState {
             viewport_keyboard_focused: false,
             viewport_click_origin: None,
             viewport_gizmo_drag: None,
+            gizmo_mode: GizmoMode::Translate,
+
+            hierarchy_expanded: HashSet::new(),
+            material_texture_ids: Vec::new(),
+            cached_material_infos: Vec::new(),
 
             runtime_scene: RuntimeScene::default(),
         };

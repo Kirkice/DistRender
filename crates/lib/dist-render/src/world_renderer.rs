@@ -12,6 +12,7 @@ use crate::{
         shadow_denoise::ShadowDenoiseRenderer, ssgi::*, taa::TaaRenderer,
     },
 };
+pub use crate::renderers::raster_meshes::{MeshMaterialInfo, MATERIAL_MAP_NAMES};
 use glam::{Affine3A, Vec2, Vec3};
 use dist_render_asset::mesh::{AssetRef, GpuImage, MeshMaterialFlags, PackedTriMesh, PackedVertex};
 use dist_render_backend::{
@@ -154,6 +155,8 @@ pub struct WorldRenderer {
     pub(super) raster_simple_render_pass: Arc<RenderPass>,
     pub(super) bindless_descriptor_set: vk::DescriptorSet,
     pub(super) meshes: Vec<UploadedTriMesh>,
+
+    pub(super) mesh_material_infos: Vec<Vec<MeshMaterialInfo>>,
 
     pub(super) mesh_lights: Vec<MeshLightSet>,
 
@@ -457,6 +460,7 @@ impl WorldRenderer {
             //cube_index_buffer: Arc::new(cube_index_buffer),
             device: backend.device.clone(),
             meshes: Default::default(),
+            mesh_material_infos: Default::default(),
             instances: Default::default(),
             instance_handles: Default::default(),
             instance_handle_to_index: Default::default(),
@@ -620,7 +624,7 @@ impl WorldRenderer {
         unique_images.sort();
         unique_images.dedup();
 
-        let loaded_images = {
+        let loaded_image_arcs: Vec<Arc<Image>> = {
             let device = self.device.clone();
             easy_parallel::Parallel::new()
                 .each(unique_images.iter(), |&asset| {
@@ -635,7 +639,15 @@ impl WorldRenderer {
                 .map(|&asset| load_gpu_image_asset(device.clone(), asset))
                 .collect::<Vec<_>>()
         };*/
-        let loaded_images = loaded_images.into_iter().map(|img| self.add_image(img));
+
+        // Build asset-ref → Arc<Image> mapping for material info display.
+        let asset_to_image: HashMap<AssetRef<GpuImage::Flat>, Arc<Image>> = unique_images
+            .iter()
+            .copied()
+            .zip(loaded_image_arcs.iter().cloned())
+            .collect();
+
+        let loaded_images = loaded_image_arcs.into_iter().map(|img| self.add_image(img));
 
         let material_map_to_image: HashMap<AssetRef<GpuImage::Flat>, BindlessImageHandle> =
             unique_images.into_iter().zip(loaded_images).collect();
@@ -742,10 +754,51 @@ impl WorldRenderer {
             index_offset: vertex_index_offset,
         };
 
+        // Compute object-space AABB from vertex positions.
+        let mut aabb_min = [f32::MAX; 3];
+        let mut aabb_max = [f32::MIN; 3];
+        for vert in mesh.verts.as_slice() {
+            for i in 0..3 {
+                aabb_min[i] = aabb_min[i].min(vert.pos[i]);
+                aabb_max[i] = aabb_max[i].max(vert.pos[i]);
+            }
+        }
+
         self.meshes.push(UploadedTriMesh {
             index_buffer_offset: vertex_index_offset as u64,
             index_count: mesh.indices.len() as _,
+            aabb_min,
+            aabb_max,
         });
+
+        // Build per-material display info with texture image references.
+        {
+            let maps_slice = mesh.maps.as_slice();
+            let material_infos: Vec<MeshMaterialInfo> = mesh
+                .materials
+                .iter()
+                .map(|mat| {
+                    let map_images = [0usize, 1, 2, 3].map(|slot| {
+                        let asset_ref = maps_slice[mat.maps[slot] as usize];
+                        let img = asset_to_image.get(&asset_ref).cloned()?;
+                        // Filter out tiny placeholder textures (e.g. 1×1).
+                        if img.desc.extent[0] <= 2 && img.desc.extent[1] <= 2 {
+                            None
+                        } else {
+                            Some(img)
+                        }
+                    });
+                    MeshMaterialInfo {
+                        base_color_mult: mat.base_color_mult,
+                        roughness_mult: mat.roughness_mult,
+                        metalness_factor: mat.metalness_factor,
+                        emissive: mat.emissive,
+                        map_images,
+                    }
+                })
+                .collect();
+            self.mesh_material_infos.push(material_infos);
+        }
 
         let mesh_lights = if opts.use_lights {
             let emissive_materials = mesh
@@ -840,6 +893,23 @@ impl WorldRenderer {
     ) -> &mut InstanceDynamicParameters {
         let index = self.instance_handle_to_index[&inst];
         &mut self.instances[index].dynamic_parameters
+    }
+
+    /// Returns the object-space AABB (`(min, max)`) for the given mesh handle.
+    pub fn mesh_aabb(&self, mesh: MeshHandle) -> ([f32; 3], [f32; 3]) {
+        let m = &self.meshes[mesh.0];
+        (m.aabb_min, m.aabb_max)
+    }
+
+    /// Returns the mesh handle bound to the given instance.
+    pub fn instance_mesh(&self, inst: InstanceHandle) -> MeshHandle {
+        let index = self.instance_handle_to_index[&inst];
+        self.instances[index].mesh
+    }
+
+    /// Returns per-material display info for the given mesh, including texture images.
+    pub fn mesh_material_infos(&self, mesh: MeshHandle) -> &[MeshMaterialInfo] {
+        &self.mesh_material_infos[mesh.0]
     }
 
     pub(crate) fn build_ray_tracing_top_level_acceleration(&mut self) {
